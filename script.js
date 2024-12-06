@@ -1,10 +1,12 @@
 import { Marked } from "https://cdn.jsdelivr.net/npm/marked@13/+esm";
-import * as pdfjs from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/+esm";
-pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.min.mjs";
+import * as pdfjs from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9/+esm";
+pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9/build/pdf.worker.min.mjs";
 
 const marked = new Marked();
-const pdfViewerCard = document.getElementById("pdfViewerCard");
-const pdfViewer = document.getElementById("pdfViewer");
+const pdfViewerCard = document.getElementById("undertakingPdfViewerCard");
+const pdfViewer = document.getElementById("undertakingPdfViewer");
+let isPdfUploadedUndertaking = false;
+let isExcelUploadedUndertaking = false;
 const state = {
   undertakingPdfs: {},
   customerPdfs: {},
@@ -12,6 +14,25 @@ const state = {
   undertakingExcel: null,
   customerExcel: null,
 };
+
+function extractJSON(data) {
+  const jsonPattern = /```json([\s\S]*?)```/;
+  const match = data.match(jsonPattern);
+  console.log("match:", match);
+  let jsonData = {};
+  if (match) {
+    // Step 2: Parse the JSON string to a JavaScript object
+    try {
+      jsonData = JSON.parse(match[1].trim());
+      console.log("JSONData: ", jsonData);
+      return jsonData; // Logs the parsed JSON object
+    } catch (error) {
+      console.error("Invalid JSON:", error);
+    }
+  } else {
+    console.error("No JSON block found in the markdown.");
+  }
+}
 
 // Show/hide loading spinner
 function toggleLoading(show) {
@@ -28,33 +49,42 @@ function highlightNumbers(text) {
   return text.replace(/\b\d+(\.\d+)?\b/g, '<span class="number">$&</span>');
 }
 
-function generateSingleCard(data) {
+function generateSingleTable(data) {
   let table = `
-  <table class="table table-striped">
-  <thead>
-  <tr>
-  <th>Field</th>
-  <th>Details</th>
-  </tr>
-  </thead>
-  <tbody>
-  `;
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Pdf Data</th>
+          <th>Excel Data</th>
+        </tr>
+      </thead>
+      <tbody>
+    `;
 
   for (const [key, value] of Object.entries(data)) {
+    // Check if the value is an array
+
     table += `
-<tr>
-  <td>${key}</td>
-  <td>${value}</td>
-</tr>`;
+        <tr>
+          <td>${key}</td>
+          <td>
+            ${value[0]}
+          </td>
+          <td>
+            ${value[1]}
+          </td>
+        </tr>`;
   }
 
   table += `
-  </tbody>
-</table>`;
+      </tbody>
+    </table>`;
+
   return table;
 }
 
-function generateMultipleCards() {
+function generateMultipleTable() {
   const table = ``;
   return table;
 }
@@ -103,6 +133,8 @@ document.getElementById("customerManagementCard").addEventListener("click", () =
 });
 
 document.getElementById("undertakingPdfUpload").addEventListener("change", async (e) => {
+  isPdfUploadedUndertaking = e.target.files.length > 0;
+  resetValuesUndertaking();
   await handlePdfUpload(
     e.target.files,
     document.getElementById("undertakingPdfContent"),
@@ -134,37 +166,46 @@ document.getElementById("undertakingPdfSelect").addEventListener("change", async
     pdfViewerCard.classList.add("d-none");
 
     // Check if the selected file exists in state
-    // if (!selectedFile || !pdfContent) {
-    //   throw new Error("PDF not found");
-    // }
+    if (!selectedFile || !pdfContent) {
+      throw new Error("PDF not found");
+    }
 
     // Highlight numbers and display PDF content in the undertaking section
-    // document.getElementById("undertakingPdfContent").innerHTML = highlightNumbers(pdfContent);
+    document.getElementById("undertakingPdfContent").innerHTML = highlightNumbers(pdfContent);
 
     // Generate initial table
-    const systemPrompt = `You are an expert loan analyzer. Draw key insights from the data and only present in a structured table.
+    const systemPrompt = `You are an expert loan analyzer.
+    Compare the User data with the data in excel and list the below details side by side for the particular user
+    Present in a structured table.
 
     > Data should have the following:
-1) Creditor
-2) Borrower
-3) Account Number
-4) Annual Percentage Rate (APR)
-5) Finance Charge
-6) Amount Financed
-7) Total of Payments
-8) Monthly Payment Amount
-9) Number of Payments
-10) Returned Payment Fee
-11) Origination Fee
-12) Late Charges
-13) Prepayment Penalty
-14) Refund on Finance Charge upon Prepayment
-15) Acknowledgment - Borrower acknowledges receipt of the Truth in Lending Statement
+1) "Creditor" : ["userData","exceldata"]
+2) "Borrower" : ["userData","exceldata"]
+3) "Account Number" : ["userData","exceldata"]
+4) "Annual Percentage Rate (APR)" : ["userData","exceldata"]
+5) "Finance Charge" : ["userData","exceldata"]
+6) "Amount Financed": ["userData","exceldata"]
+7) "Total of Payments ": ["userData","exceldata"]
+8) "Monthly Payment Amount" : ["userData","exceldata"]
+9) "Number of Payments" :["userData","exceldata"]
+10) "Returned Payment Fee": ["userData","exceldata"]
+11) "Origination Fee" : ["userData","exceldata"]
+12) "Late Charges" : ["userData","exceldata"]
+13) "Prepayment Penalty" : ["userData","exceldata"]
+14) "Refund on Finance Charge upon Prepayment" : ["userData","exceldata"]
+15) "Acknowledgment" - Borrower acknowledges receipt of the Truth in Lending Statement : ["userData","exceldata"]
 
-Should be a vertical table.`;
+  > Data should contain only userdata and exceldata without nested dictionaries.
+  In following format : { "Field":["userData","exceldata"] }
+  Return Data only in JSON Format`;
 
-    const table = await processWithLLM(systemPrompt, pdfContent);
-    document.getElementById("undertakingOutput").innerHTML = marked.parse(table);
+    const userprompt = `\n\n User Data : ${pdfContent}\n\n Excel Data : ${JSON.stringify(state.undertakingExcel)}\n\n`;
+    const data = await processWithLLM(systemPrompt, userprompt);
+    console.log("Data for undertaking Indifividual Report:", data);
+    const jsonData = extractJSON(data);
+    const table = generateSingleTable(jsonData);
+    document.getElementById("undertakingIndividualReportCard").classList.remove("d-none");
+    document.getElementById("undertakingIndividualReport").innerHTML = table;
 
     // Show PDF in the PDF viewer
     const pdfs = JSON.parse(localStorage.getItem("pdfs") || "{}");
@@ -179,6 +220,7 @@ Should be a vertical table.`;
     const blobUrl = URL.createObjectURL(blob);
 
     pdfViewer.src = blobUrl;
+    URL.revokeObjectURL(blobUrl);
     pdfViewerCard.classList.remove("d-none");
   } catch (error) {
     console.error("Error handling PDF: " + error.message);
@@ -216,22 +258,8 @@ Return the data in json format only.
   const userprompt = `\n\nUser Data = ${content}\n\n`;
   const data = await processWithLLM(systemPrompt, userprompt);
   console.log("Processed Individual Customer Data : ", data);
-  const jsonPattern = /```json([\s\S]*?)```/;
-  const match = data.match(jsonPattern);
-  console.log("match:", match);
-  let jsonData = {};
-  if (match) {
-    // Step 2: Parse the JSON string to a JavaScript object
-    try {
-      jsonData = JSON.parse(match[1].trim());
-      console.log("JSONData: ", jsonData); // Logs the parsed JSON object
-    } catch (error) {
-      console.error("Invalid JSON:", error);
-    }
-  } else {
-    console.error("No JSON block found in the markdown.");
-  }
-  const table = generateSingleCard(jsonData);
+  let jsonData = extractJSON(data);
+  const table = generateSingleTable(jsonData);
   document.getElementById("customerOutput").innerHTML = table;
 });
 
@@ -353,6 +381,7 @@ async function handleExcelUpload(file, stateKey) {
 }
 
 document.getElementById("undertakingExcelUpload").addEventListener("change", (e) => {
+  isPdfUploadedUndertaking = e.target.files.length > 0;
   if (e.target.files[0]) handleExcelUpload(e.target.files[0], "undertakingExcel");
 });
 
@@ -441,4 +470,41 @@ async function processPdf(file) {
     console.error("Failed to process PDF: " + error.message);
     return "";
   }
+}
+
+// Resetting Value
+
+function resetValuesUndertaking() {
+  // Clear the content display
+  const pdfContent = document.getElementById("undertakingPdfContent");
+  if (pdfContent) {
+    pdfContent.innerHTML = ""; // Clear previous content
+  }
+
+  // Reset the select dropdown
+  const pdfSelect = document.getElementById("undertakingPdfSelect");
+  if (pdfSelect) {
+    pdfSelect.innerHTML = "<option value=''>Select a PDF</option>"; // Reset to default option
+  }
+
+  // Clear the state storage for PDFs
+  if (state && state.undertakingPdfs) {
+    state.undertakingPdfs = {}; // Reset state object
+  }
+
+  // Clear the output box (if applicable)
+  const outputBox = document.getElementById("undertakingOutput");
+  if (outputBox) {
+    outputBox.value = ""; // Clear the output text
+  }
+
+  if (!pdfViewerCard.classList.contains("d-none")) {
+    pdfViewerCard.classList.add("d-none");
+  }
+
+  const individualReportCard = document.getElementById("undertakingIndividualReportCard");
+  if (!individualReportCard.classList.contains("d-none")) {
+    individualReportCard.classList.add("d-none");
+  }
+  console.log("Values reset successfully!");
 }
