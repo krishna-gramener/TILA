@@ -1,0 +1,10 @@
+{
+  "pdfs": [
+    { "name": "1.pdf", "path": "assets/pdf/1.pdf" },
+    { "name": "2.pdf", "path": "assets/pdf/2.pdf" },
+    { "name": "3.pdf", "path": "assets/pdf/3.pdf" },
+    { "name": "4.pdf", "path": "assets/pdf/4.pdf" },
+    { "name": "5.pdf", "path": "assets/pdf/5.pdf" }
+  ],
+  "excel": [{ "name": "Production_Data.xlsx", "path": "assets/excel/Production_Data_Modified.xlsx" }]
+}
