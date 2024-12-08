@@ -23,6 +23,11 @@ const filesUploaded = {
   isCustomerExcel: false,
 };
 
+const { token } = await fetch("https://llmfoundry.straive.com/token", { credentials: "include" }).then((r) => r.json());
+if (!token) {
+  const url = "https://llmfoundry.straive.com/login?" + new URLSearchParams({ next: location.href });
+  render(html`<a class="btn btn-primary" href="${url}">Log into LLM Foundry</a></p>`, document.querySelector("#login"));
+}
 // Load cache from localStorage
 try {
   const cached = localStorage.getItem(CACHE_KEY);
@@ -215,9 +220,6 @@ function generateExcelTable() {
   // Return the table
   return table;
 }
-
-
-
 
 function generateMultipleTable() {
   const table = ``;
@@ -676,7 +678,7 @@ async function extractTextUsingGemini(base64Pdf) {
         method: "POST",
         headers: {
           Authorization:
-            "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImtyaXNobmEua3VtYXJAZ3JhbWVuZXIuY29tIn0.QY0QNLADfGARpZvcew8DJgrtMtdxJ8NHUn9_qnSiWEM:llmproxy-playground",
+            `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
