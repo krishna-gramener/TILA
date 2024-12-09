@@ -216,7 +216,7 @@ function generateExcelTable() {
       <tr>
         <td>${pdfField}</td>
         <td>${pdfValueRaw}</td>
-        <td>${excelValue}</td>
+        <td>${excelValue==null?0:excelValue}</td>
         <td>${match ? "Y" : "N"}</td>
       </tr>`;
   }
