@@ -369,8 +369,8 @@ function generateFinalUndertakingTable() {
 
 function generateCustomerFinalTable(){
 
-  const selectedPdf = state.undertakingPdfs[document.getElementById("customerPdfSelect").value];
-  const selectLoanPdf=state.loanPdfs[document.getElementById("loanPdfSelect").value];
+  const pdfDataArray = state.undertakingPdfs;
+  const loanDataArray=state.loanPdfs;
   const selectExcel=state.undertakingExcel;
 
 
@@ -662,12 +662,12 @@ async function loadFiles() {
 
     // Preload and cache PDF texts (optional)
     for (const pdf of pdfConfig) {
-      // if (!extractedTexts[pdf.path]) {
+      if (!extractedTexts[pdf.path]) {
         const base64 = await getBase64FromPdf(pdf.path);
         const text = await extractTextUsingGemini(base64);
         const textInJson = extractJSON(text);
         extractedTexts[pdf.path] = textInJson;
-      // }
+      }
     }
 
     // // Concatenate all text for "all PDFs" option
@@ -703,12 +703,12 @@ async function loadFiles() {
     });
 
     for (const loan of loanConfig) {
-      // if (!extractedTexts[loan.path]) {
+      if (!extractedTexts[loan.path]) {
         const base64 = await getBase64FromPdf(loan.path);
         const text = await extractLoanTextUsingGemini(base64);
         const textInJson = extractJSON(text);
         extractedLoanTexts[loan.path] = textInJson;
-      // }
+      }
     }
 
     // extractedLoanTexts["all"] = Object.values(extractedLoanTexts)
