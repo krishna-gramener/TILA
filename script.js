@@ -1,18 +1,17 @@
-import { Marked } from "https://cdn.jsdelivr.net/npm/marked@13/+esm";
+import { html, render } from "https://cdn.jsdelivr.net/npm/lit-html@3/+esm";
 import * as pdfjs from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9/+esm";
 pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.9/build/pdf.worker.min.mjs";
 
-const marked = new Marked();
 const pdfViewerCard = document.getElementById("undertakingPdfViewerCard");
 const pdfViewer = document.getElementById("undertakingPdfViewer");
 const CACHE_KEY = "pdfExtractCache";
 const CACHE_KEY_EXCEL = "excelData";
+const CACHE_KEY_LOAN="loanData";
+
 const state = {
   undertakingPdfs: {},
-  customerPdfs: {},
   loanPdfs: {},
   undertakingExcel: {}, // Initialized as an empty object
-  customerExcel: {}, // Initialized as an empty object
 };
 
 const filesUploaded = {
@@ -28,14 +27,15 @@ if (!token) {
   const url = "https://llmfoundry.straive.com/login?" + new URLSearchParams({ next: location.href });
   render(html`<a class="btn btn-primary" href="${url}">Log into LLM Foundry</a></p>`, document.querySelector("#login"));
 }
-// Load cache from localStorage
+
+
 try {
   const cached = localStorage.getItem(CACHE_KEY);
   if (cached) {
     state.undertakingPdfs = JSON.parse(cached);
   }
 } catch (error) {
-  console.error("Cache loading error:", error);
+  showError("Cache loading error:", error);
 }
 
 try {
@@ -44,7 +44,16 @@ try {
     state.undertakingExcel = JSON.parse(cached);
   }
 } catch (error) {
-  console.error("Cache loading error:", error);
+  showError("Cache loading error:", error);
+}
+
+try {
+  const cached = localStorage.getItem(CACHE_KEY_LOAN);
+  if (cached) {
+    state.loanPdfs = JSON.parse(cached);
+  }
+} catch (error) {
+  showError("Cache loading error:", error);
 }
 
 // ----------------------------------------------Misc Functions----------------------------------------------
@@ -56,13 +65,13 @@ function extractJSON(data) {
     // Step 2: Parse the JSON string to a JavaScript object
     try {
       jsonData = JSON.parse(match[1].trim());
-      console.log("JSONData: ", jsonData);
+
       return jsonData; // Logs the parsed JSON object
     } catch (error) {
-      console.error("Invalid JSON:", error);
+      showError("Invalid JSON:", error);
     }
   } else {
-    console.error("No JSON block found in the markdown.");
+    showError("No JSON block found in the markdown.");
   }
 }
 
@@ -98,7 +107,7 @@ function generateSingleTable(data) {
   ];
 
   let table = `
-    <table>
+    <table class="table table-stripped">
       <thead>
         <tr>
           <th>Feature</th>
@@ -131,13 +140,13 @@ function generateExcelTable() {
   const excelData = state.undertakingExcel; // JSON array containing Excel data for all sheets
 
   if (!pdfData || !excelData) {
-    console.error("PDF or Excel data is missing.");
+    showError("PDF or Excel data is missing.");
     return;
   }
 
   // Define the fields to compare and their mappings
   const fieldMappings = {
-    Borrower: "Borrower",
+    "Borrower": "Borrower",
     "Annual Percentage Rate (APR)": "Annual Percentage Rate (APR)",
     "Finance Charge": "Finance Charge",
     "Amount Financed": "Amount Financed",
@@ -154,19 +163,19 @@ function generateExcelTable() {
   const matchingRow = excelData.find((ele) => ele["Loan Id"] == loanId);
 
   if (!matchingRow) {
-    console.error("No matching row found in Excel data for the provided Loan ID.");
+    showError("No matching row found in Excel data for the provided Loan ID.");
     return `<p>No matching data found for Loan ID: ${loanId}</p>`;
   }
 
   // Start creating the HTML table
   let table = `
-    <table>
+    <table class="table table-striped">
       <thead>
         <tr>
           <th>Field</th>
           <th>TILA Data</th>
           <th>Excel Data</th>
-          <th>Mismatch</th>
+          <th>Match</th>
         </tr>
       </thead>
       <tbody>`;
@@ -195,12 +204,12 @@ function generateExcelTable() {
     }
 
     // Compare the values for mismatch (normalize strings for comparison only)
-    const mismatch =
+    const match =
       typeof pdfValue === "number" && typeof excelValue === "number"
-        ? pdfValue.toFixed(2) != excelValue.toFixed(2) // Numeric comparison
+        ? pdfValue.toFixed(2) == excelValue.toFixed(2) // Numeric comparison
         : typeof pdfValueRaw === "string" && typeof excelValue === "string"
-        ? pdfValueRaw.trim() !== excelValue.trim() // String comparison (case-sensitive, original format)
-        : pdfValue != excelValue;
+        ? pdfValueRaw.trim() === excelValue.trim() // String comparison (case-sensitive, original format)
+        : pdfValue == excelValue;
 
     // Add a row to the table
     table += `
@@ -208,7 +217,7 @@ function generateExcelTable() {
         <td>${pdfField}</td>
         <td>${pdfValueRaw}</td>
         <td>${excelValue}</td>
-        <td>${mismatch ? "Y" : "N"}</td>
+        <td>${match ? "Y" : "N"}</td>
       </tr>`;
   }
 
@@ -221,39 +230,152 @@ function generateExcelTable() {
   return table;
 }
 
-function generateMultipleTable() {
-  const table = ``;
-  return table;
+function generateFinalUndertakingTable() {
+  const pdfDataArray = state.undertakingPdfs; // Array of PDF data objects
+  const excelDataArray = state.undertakingExcel; // Array of Excel data objects
+
+  // Initialize counters for the summary table
+  let totalAccountsChecked = 0;
+  let accountsWithIncorrectData = 0;
+  let incorrectOnFields = {
+    "APR": 0,
+    "Finance Charge": 0,
+    "Amount Financed": 0,
+    "Total of Payments": 0,
+    "Number of Payments": 0,
+    "Monthly Payment Amount": 0,
+    "Origination Fee": 0,
+  };
+
+  // Initialize table for detailed data
+  let detailedTable = `
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Application ID</th>
+            <th>Loan ID</th>
+            <th>Booking Date</th>
+            <th>Origination Fee Charges (per TILA)</th>
+            <th>Origination Fee Charges (per Excel)</th>
+            <th>Mismatch</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+  // Iterate through the PDF data array
+  Object.entries(pdfDataArray).forEach(([key, pdfData]) => {
+    if (key === "all") return; // Skip summary objects if present
+    const loanId = pdfData["Account Number"];
+    const matchingExcelRow = excelDataArray.find((excelData) => excelData["Loan Id"] == loanId);
+
+    if (matchingExcelRow) {
+      totalAccountsChecked++;
+
+      // Initialize flag for incorrect data in any field
+      let hasIncorrectData = false;
+
+      // Check for mismatches in specific fields and increment counters
+      for (const field of [
+        "Annual Percentage Rate (APR)",
+        "Finance Charge",
+        "Amount Financed",
+        "Total of Payments",
+        "Number of Payments",
+        "Monthly Payment Amount",
+        "Origination Fee",
+      ]) {
+        // Map Monthly Payment Amount to EMI Amount in Excel
+        const excelField =
+          field === "Monthly Payment Amount" ? "EMI Amount" : field;
+
+        // Parse PDF and Excel values consistently
+        let pdfValue = parseFloat(pdfData[field]?.replace(/[$,%]/g, "")) || 0;
+        let excelValue = parseFloat(matchingExcelRow[excelField]) || 0;
+
+        // Special handling for APR field
+        if (field === "Annual Percentage Rate (APR)") {
+          excelValue = parseFloat((excelValue * 100).toFixed(2)); // Convert to percentage
+        }
+
+        // Round to two decimals for comparison
+        pdfValue = parseFloat(pdfValue.toFixed(2));
+        excelValue = parseFloat(excelValue.toFixed(2));
+
+        // Check mismatch and update counters
+        if (pdfValue !== excelValue) {
+          hasIncorrectData = true;
+          incorrectOnFields[field]++;
+        }
+      }
+
+      // Update the number of accounts with incorrect data
+      if (hasIncorrectData) {
+        accountsWithIncorrectData++;
+      }
+
+      // Check if Origination Fee matches
+      const originationFeePdf = parseFloat(pdfData["Origination Fee"]?.replace(/[$,]/g, "")) || 0;
+      const originationFeeExcel = parseFloat(matchingExcelRow["Origination Fee"]) || 0;
+      const originationFeeMismatch = originationFeePdf.toFixed(2) !== originationFeeExcel.toFixed(2) ? 'Y' : 'N';
+
+      // Add row to the detailed table with application ID, Loan ID, Origination Fee charges, and mismatch column
+      detailedTable += `
+          <tr>
+            <td>${matchingExcelRow["Application Id"]}</td>
+            <td>${loanId}</td>
+            <td>${matchingExcelRow["Booking Date"] || "N/A"}</td>
+            <td>${pdfData["Origination Fee"] || "N/A"}</td>
+            <td>${matchingExcelRow["Origination Fee"].toFixed(2) || "N/A"}</td>
+            <td>${originationFeeMismatch}</td>
+          </tr>`;
+    }
+  });
+
+  // Close the detailed data table
+  detailedTable += `
+        </tbody>
+      </table>`;
+
+  // Create the summary table with counts
+  let summaryTable = `
+      <table class="table table-striped mb-4">
+        <tbody>
+          <tr>
+            <th>Total Accounts Checked</th>
+            <td>${totalAccountsChecked}</td>
+          </tr>
+          <tr>
+            <th>Number of Accounts with Incorrect Data</th>
+            <td>${accountsWithIncorrectData}</td>
+          </tr>
+          ${Object.entries(incorrectOnFields)
+            .map(
+              ([field, count]) => `
+          <tr>
+            <th>Number of Accounts Incorrect on ${field}</th>
+            <td>${count}</td>
+          </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+
+  // Return both the summary table and the detailed table
+  return {
+    summaryTable: summaryTable,
+    detailedTable: detailedTable,
+  };
 }
 
-// ----------------------------------------------LLM Function---------------------------------------------------
-async function processWithLLM(systemPrompt, userPrompt) {
-  toggleLoading(true);
-  try {
-    const response = await fetch("https://llmfoundry.straive.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
+function generateCustomerFinalTable(){
 
-    const result = await response.json();
-    console.log(result);
-    return result.choices?.[0]?.message?.content || "No data generated";
-  } catch (error) {
-    showError("Failed to process with LLM: " + error.message);
-    return "";
-  } finally {
-    toggleLoading(false);
-  }
+  const selectedPdf = state.undertakingPdfs[document.getElementById("customerPdfSelect").value];
+  const selectLoanPdf=state.loanPdfs[document.getElementById("loanPdfSelect").value];
+  const selectExcel=state.undertakingExcel;
+
+
+
 }
-
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {
   document.getElementById("undertakingSection").style.display = "block";
@@ -269,26 +391,6 @@ document.getElementById("customerManagementCard").addEventListener("click", () =
   document.getElementById("customerManagementCard").classList.add("bg-primary", "text-white");
 });
 
-// --------------------------------------Pdf Uploads Handling ------------------------------------------
-document.getElementById("customerPdfUpload").addEventListener("change", async (e) => {
-  await handlePdfUpload(
-    e.target.files,
-    document.getElementById("customerOutput"),
-    document.getElementById("customerPdfSelect"),
-    state.customerPdfs,
-    "customer_data"
-  );
-});
-
-document.getElementById("loanPdfUpload").addEventListener("change", async (e) => {
-  await handlePdfUpload(
-    e.target.files,
-    document.getElementById("undertakingPdfContent"),
-    document.getElementById("undertakingPdfSelect"),
-    state.loanPdfs,
-    "loan_data"
-  );
-});
 // ---------------------------------------Individual Reports-----------------------------------------------
 
 //Table Rendering for Individual Customer Data in undertaking Section
@@ -319,10 +421,9 @@ document.getElementById("undertakingPdfSelect").addEventListener("change", async
       ? generateExcelTable()
       : generateSingleTable(state.undertakingPdfs[selectedFile]);
     individualReportCard.classList.remove("d-none");
-    console.log("Individual Report Data :", state.undertakingPdfs[selectedFile]);
     document.getElementById("undertakingIndividualReport").innerHTML = table;
   } catch (error) {
-    console.error("Error handling PDF: " + error.message);
+    showError("Error handling PDF: " + error.message);
   } finally {
     // Hide loading spinner
     loadingSpinner.classList.add("d-none");
@@ -331,99 +432,157 @@ document.getElementById("undertakingPdfSelect").addEventListener("change", async
 
 //Table Rendering for Customer Data in CM Section
 document.getElementById("customerPdfSelect").addEventListener("change", async (e) => {
-  const content = state.customerPdfs[e.target.value] || "";
-  document.getElementById("customerPdfContent").innerHTML = highlightNumbers(content);
-  // Generate initial table
-  const systemPrompt = `> You are an expert loan analyzer.Draw key terms from the data in a key value format.
 
-    > Data should have the following :-
-1)Creditor
-2) Borrower
-3) Account Number
-4) Annual Percentage Rate (APR)
-5) Finance Charge
-6) Amount Financed
-7)Total of Payments
-8) Monthly Payment Amount
-9) Number of Payments
-10) Returned Payment Fee
-11) Origination Fee
-12) Late Charges
-13) Prepayment Penalty
-14) Refund on Finance Charge upon Prepayment
-15) Acknowledgment	Borrower acknowledges receipt of the Truth in Lending Statement
-Return the data in json format only.
-    `;
-  const userprompt = `\n\nUser Data = ${content}\n\n`;
-  const data = await processWithLLM(systemPrompt, userprompt);
-  console.log("Processed Individual Customer Data : ", data);
-  let jsonData = extractJSON(data);
-  const table = generateSingleTable(jsonData);
-  document.getElementById("customerOutput").innerHTML = table;
+  filesUploaded.isCustomerPdf=document.getElementById("customerPdfSelect").value !=="";
+  const selectedFile = e.target.value;
+  const individualReportCard = document.getElementById("customerIndividualReportCard");
+  const loadingSpinner = document.getElementById("loadingSpinner");
+  const pdfExtractCard = document.getElementById("customerPdfContentCard");
+  const customerPdfViewerCard=document.getElementById("customerPdfViewerCard");
+  const pdfViewerCustomer=document.getElementById("customerPdfViewer");
+
+  try {
+    // Show loading spinner
+    loadingSpinner.classList.remove("d-none");
+    // pdfViewerCard.classList.add("d-none");
+    // pdfExtractCard.classList.add("d-none");
+    // individualReportCard.classList.add("d-none");
+    // Check if the selected file exists in state
+    if (!selectedFile || !pdfContent) {
+      throw new Error("PDF not found");
+    }
+    pdfViewerCustomer.src = e.target.value;
+    // customerPdfViewerCard.classList.remove("d-none");
+    // pdfExtractCard.classList.remove("d-none");
+  } catch (error) {
+    showError("Error handling PDF: " + error.message);
+  } finally {
+    // Hide loading spinner
+    loadingSpinner.classList.add("d-none");
+  }
 });
 
+
+document.getElementById("loanPdfSelect").addEventListener("change", async (e) => {
+  filesUploaded.isCustomerLoanPdf=document.getElementById("loanPdfSelect").value !=="";
+  const selectedFile = e.target.value;
+  const pdfContent = state.loanPdfs[selectedFile]["Complete Extracted Text"] || "";
+  const individualReportCard = document.getElementById("customerIndividualReportCard");
+  const loadingSpinner = document.getElementById("loadingSpinner");
+  const pdfExtractCard = document.getElementById("customerPdfContentCard");
+  const customerPdfViewerCard=document.getElementById("customerPdfViewerCard");
+  const pdfViewerCustomer=document.getElementById("customerPdfViewer");
+
+  try {
+    // Show loading spinner
+    loadingSpinner.classList.remove("d-none");
+    pdfViewerCard.classList.add("d-none");
+    pdfExtractCard.classList.add("d-none");
+    individualReportCard.classList.add("d-none");
+    // Check if the selected file exists in state
+    if (!selectedFile || !pdfContent) {
+      throw new Error("PDF not found");
+    }
+    pdfViewerCustomer.src = e.target.value;
+    customerPdfViewerCard.classList.remove("d-none");
+    pdfExtractCard.classList.remove("d-none");
+
+    // Highlight numbers and display PDF content in the undertaking section
+    document.getElementById("customerPdfContent").innerHTML = highlightNumbers(pdfContent);
+
+    // Generate initial table
+    // const table = filesUploaded.isCustomerExcel
+    //   ? generateExcelTable()
+    //   : generateSingleTable(state.undertakingPdfs[selectedFile]);
+    // individualReportCard.classList.remove("d-none");
+    // document.getElementById("customerIndividualReport").innerHTML = table;
+  } catch (error) {
+    showError("Error handling PDF: " + error.message);
+  } finally {
+    // Hide loading spinner
+    loadingSpinner.classList.add("d-none");
+  }
+})
+
+document.getElementById("undertakingExcelSelect").addEventListener("change", async (e) => {
+  filesUploaded.isUndertakingExcel = document.getElementById("undertakingExcelSelect").value !== "";
+  const selectedFile = document.getElementById("undertakingPdfSelect").value;
+  const pdfContent = state.undertakingPdfs[selectedFile]["Complete Extracted Text"] || "";
+  const individualReportCard = document.getElementById("undertakingIndividualReportCard");
+
+  try {
+    // Show loading spinner
+    loadingSpinner.classList.remove("d-none");
+    individualReportCard.classList.add("d-none");
+
+    // Check if the selected file exists in state
+    if (!selectedFile || !pdfContent) {
+      throw new Error("PDF not found");
+    }
+    document.getElementById("undertakingIndividualReportCard").classList.remove("d-none");
+    const table = generateExcelTable();
+    document.getElementById("undertakingIndividualReport").innerHTML = table;
+  } catch (error) {
+    showError("Error handling PDF: " + error.message);
+  } finally {
+    // Hide loading spinner
+    loadingSpinner.classList.add("d-none");
+  }
+});
+
+document.getElementById("customerExcelSelect").addEventListener("change", async (e) => {
+  filesUploaded.isCustomerExcel=document.getElementById("customerExcelSelect").value !=="";
+  const selectedFile = e.target.value;
+  const individualReportCard = document.getElementById("customerIndividualReportCard");
+  const loadingSpinner = document.getElementById("loadingSpinner");
+  const pdfExtractCard = document.getElementById("customerPdfContentCard");
+  const customerPdfViewerCard=document.getElementById("customerPdfViewerCard");
+  const pdfViewerCustomer=document.getElementById("customerPdfViewer");
+
+  if(filesUploaded.isCustomerExcel && filesUploaded.isCustomerLoanPdf && filesUploaded.isCustomerPdf){
+    // Show loading spinner
+    loadingSpinner.classList.remove("d-none");
+    individualReportCard.classList.add("d-none");
+
+    const table=generateLoanExcelTable();
+    individualReportCard.classList.remove("d-none");
+    document.getElementById("customerIndividualReport").innerHTML = table;
+  }
+})
 // ------------------------------------------Process Buttons-------------------------------------------
 
 document.getElementById("undertakingProcess").addEventListener("click", async () => {
+
   document.getElementById("undertakingOutput").innerHTML = `<div class="spinner-border text-primary" role="status">
 </div>`;
 
   try {
+    const { summaryTable, detailedTable } = generateFinalUndertakingTable();
+    const undertakingOutput = document.getElementById("undertakingOutput");
+
+    // Clear any existing content in the output div
+    undertakingOutput.innerHTML = "";
+
+    // Insert the summary table
+    undertakingOutput.innerHTML += "<h3>Summary of Incorrect Data</h3>" + summaryTable;
+
+    // Insert the detailed table
+    undertakingOutput.innerHTML += "<h3>Detailed Comparison of Accounts</h3>" + detailedTable;
   } catch (error) {
     showError("Processing failed: " + error.message);
   } finally {
     toggleLoading(false);
-    console.log("toggleLoading Stopped");
   }
 });
 
 document.getElementById("customerProcess").addEventListener("click", async () => {
   toggleLoading(true);
   try {
-    const selectedPdf = document.getElementById("customerPdfSelect").value;
+    const table=generateCustomerFinalTable();
     if (!selectedPdf || !state.customerExcel || Object.keys(state.loanPdfs).length === 0) {
       showError("Please upload all required files");
       return;
     }
-    const systemPrompt = `You are an expert loan document analyzer.
-    Analyze loan data from PDFs and compare with Excel data accurately.
-    Map the data carefully.
-
-2) There should be 3 tables in output :-
-
-Table 1 contains the following columns :-
-Total Account checked,
-Accounts with incorrect data,
-Number of Incorrect on APR,
-Number of Incorrect on Financial Charge,
-Number of Incorrect on Amount Financed,
-Number of Incorrect on Total Payment,
-Number of Incorrect on Number of Payment,
-Number of Incorrect on Amount of Payment,
-Number of Incorrect in Origination Fee
-
-Table 2 contains the following columns Heading is Incorrect Account Details:-
-    Serial Number,
-    Loan Id,
-    Booking Date,
-    Payment Month Date,
-    Late Fees Charges (per loan pdf),
-    Late Fees charges (per customer pdf),
-    Late Fees charges (per excel)
-
-Table 3 contains the following columns Heading is Incorrect Account Details:-
-    Serial Number,
-    Loan Id,
-    Booking Date,
-    Payment Month Date,
-    Returned payment Charge (per loan pdf),
-    Returned payment Charge (per customer pdf),
-    Returned payment Charge (per excel)
-
-3) Provide a detailed summary of findings Summary should be text only.`;
-
-    const userPrompt = `Compare the following data:\nCustomer PDF: ${state.customerPdfs["all"]}\nLoan PDFs: ${state.loanPdfs["all"]}\nExcel: ${state.customerExcel}`;
-    const comparison = await processWithLLM(systemPrompt, userPrompt);
     document.getElementById("customerOutput").innerHTML = comparison;
   } catch (error) {
     showError("Processing failed: " + error.message);
@@ -452,141 +611,28 @@ async function loadExcelFiles(filePath, stateKey) {
     // Store the processed data in the state object
     const customerDataExcel = await extractExcelInfoUsingGemini(excelContent);
     state[stateKey] = extractJSON(customerDataExcel);
-    console.log("Customer Data From Excel :", state.undertakingExcel);
 
     // Optionally, save the data to localStorage for persistence
     localStorage.setItem(CACHE_KEY_EXCEL, JSON.stringify(customerDataExcel));
 
     return excelContent; // Return the parsed data
   } catch (error) {
-    console.error("Error loading Excel file:", error);
+    showError("Error loading Excel file:", error);
     return null;
   }
 }
-
-// Handle Excel uploads
-async function handleExcelUpload(file, stateKey) {
-  const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: "array" });
-
-  const excelContent = workbook.SheetNames.map((sheetName) => {
-    const sheet = workbook.Sheets[sheetName];
-    return {
-      sheetName: sheetName,
-      data: XLSX.utils.sheet_to_json(sheet, { header: 1 }), // Ensure data extraction as an array of arrays
-    };
-  });
-
-  state[stateKey] = excelContent;
-}
-
-// Handle PDF uploads
-async function handlePdfUpload(files, container, select, storage, fileName) {
-  toggleLoading(true);
-  let all = "";
-  try {
-    const pdfs = JSON.parse(localStorage.getItem("pdfs") || "{}");
-
-    for (const file of files) {
-      if (!file.type.includes("pdf")) {
-        console.log(`${file.name} is not a PDF file`);
-        continue;
-      }
-
-      // Process the PDF content
-      const text = await processPdf(file);
-      storage[file.name] = text;
-      all += text;
-
-      // Add option to select dropdown
-      if (fileName === "customer_data") {
-        const option = document.createElement("option");
-        option.value = file.name;
-        option.textContent = file.name;
-        select.appendChild(option);
-        // Read the PDF file as Base64 and store it locally
-        const reader = new FileReader();
-        await new Promise((resolve, reject) => {
-          reader.onload = () => {
-            pdfs[file.name] = reader.result; // Store the Base64 representation
-            resolve();
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      }
-    }
-
-    // Save all PDFs in localStorage
-    if (fileName === "customer_data") {
-      localStorage.setItem("pdfs", JSON.stringify(pdfs));
-    }
-    storage["all"] = all;
-    console.log(pdfs);
-    console.log(state.undertakingPdfs);
-    console.log("PDFs uploaded and stored locally successfully!", "success");
-  } catch (error) {
-    showError("Failed to upload PDF: " + error.message);
-  } finally {
-    toggleLoading(false);
-  }
-}
-// Process PDF
-async function processPdf(file) {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjs.getDocument(arrayBuffer).promise;
-    let fullText = "";
-
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items.map((item) => item.str).join(" ");
-      fullText += pageText + "\n";
-    }
-
-    return fullText;
-  } catch (error) {
-    console.error("Failed to process PDF: " + error.message);
-    return "";
-  }
-}
-
 // --------------------------------------Event Listeners-----------------------------------------------------
-document.getElementById("undertakingExcelSelect").addEventListener("change", async (e) => {
-  filesUploaded.isUndertakingExcel = document.getElementById("undertakingExcelSelect").value !== "";
-  const selectedFile = document.getElementById("undertakingPdfSelect").value;
-  const pdfContent = state.undertakingPdfs[selectedFile]["Complete Extracted Text"] || "";
-  const individualReportCard = document.getElementById("undertakingIndividualReportCard");
 
-  try {
-    // Show loading spinner
-    loadingSpinner.classList.remove("d-none");
-    individualReportCard.classList.add("d-none");
 
-    // Check if the selected file exists in state
-    if (!selectedFile || !pdfContent) {
-      throw new Error("PDF not found");
-    }
-    document.getElementById("undertakingIndividualReportCard").classList.remove("d-none");
-    const table = generateExcelTable();
-    document.getElementById("undertakingIndividualReport").innerHTML = table;
-  } catch (error) {
-    console.error("Error handling PDF: " + error.message);
-  } finally {
-    // Hide loading spinner
-    loadingSpinner.classList.add("d-none");
-  }
-});
-
-document.getElementById("customerExcelUpload").addEventListener("change", (e) => {
-  if (e.target.files[0]) handleExcelUpload(e.target.files[0], "customerExcel");
-});
 
 async function loadFiles() {
   const undertakingPdfSelect = document.getElementById("undertakingPdfSelect");
   const undertakingExcelSelect = document.getElementById("undertakingExcelSelect");
+  const customerPdfSelect = document.getElementById("customerPdfSelect");
+  const customerExcelSelect = document.getElementById("customerExcelSelect");
+  const loanPdfSelect = document.getElementById("loanPdfSelect");
   const extractedTexts = state.undertakingPdfs;
+  const extractedLoanTexts = state.loanPdfs;
   const excelDataCache = state.undertakingExcel;
 
   try {
@@ -595,15 +641,13 @@ async function loadFiles() {
 
     // Fetch the config.json file
     const response = await fetch("config.json");
-    console.log(response);
     if (!response.ok) {
       throw new Error("Failed to fetch configuration.");
     }
 
     // Parse the JSON data
-    const { pdfs: pdfConfig, excel: excelConfig } = await response.json(); // Separate PDFs and Excel files
-    console.log("pdfConfig", pdfConfig);
-    console.log("excelConfig", excelConfig);
+    const { pdfs: pdfConfig, excel: excelConfig,loan:loanConfig } = await response.json(); // Separate PDFs and Excel files
+
 
     // Populate the PDF dropdown
     pdfConfig.forEach((pdf) => {
@@ -611,23 +655,26 @@ async function loadFiles() {
       option.value = pdf.path; // Path will be used for loading
       option.textContent = pdf.name; // Name displayed in the dropdown
       undertakingPdfSelect.appendChild(option);
+
+      const customerOption = option.cloneNode(true);
+      customerPdfSelect.appendChild(customerOption);
     });
 
     // Preload and cache PDF texts (optional)
     for (const pdf of pdfConfig) {
-      if (!extractedTexts[pdf.path]) {
+      // if (!extractedTexts[pdf.path]) {
         const base64 = await getBase64FromPdf(pdf.path);
         const text = await extractTextUsingGemini(base64);
         const textInJson = extractJSON(text);
         extractedTexts[pdf.path] = textInJson;
-      }
+      // }
     }
 
-    // Concatenate all text for "all PDFs" option
-    extractedTexts["all"] = Object.values(extractedTexts)
-      .filter((text) => typeof text === "object" && text["Complete Extracted Text"]) // Ensure it's an object and has "Complete Extracted Text"
-      .map((text) => text["Complete Extracted Text"]) // Extract "Complete Extracted Text"
-      .join("\n\n---\n\n"); // Join with separators
+    // // Concatenate all text for "all PDFs" option
+    // extractedTexts["all"] = Object.values(extractedTexts)
+    //   .filter((text) => typeof text === "object" && text["Complete Extracted Text"]) // Ensure it's an object and has "Complete Extracted Text"
+    //   .map((text) => text["Complete Extracted Text"]) // Extract "Complete Extracted Text"
+    //   .join("\n\n---\n\n"); // Join with separators
 
     // Save PDF data to local storage for future use
     localStorage.setItem(CACHE_KEY, JSON.stringify(extractedTexts));
@@ -638,15 +685,43 @@ async function loadFiles() {
       option.value = excel.path; // Path will be used for loading
       option.textContent = excel.name; // Name displayed in the dropdown
       undertakingExcelSelect.appendChild(option);
+
+      const customerOption = option.cloneNode(true);
+      customerExcelSelect.appendChild(customerOption);
     });
 
     // Preload and cache Excel data (optional)
     for (const excel of excelConfig) {
       const excelData = await loadExcelFiles(excel.path, "undertakingExcel"); // Function to parse Excel data
     }
+
+    loanConfig.forEach((loan) => {
+      const option = document.createElement("option");
+      option.value = loan.path; // Path will be used for loading
+      option.textContent = loan.name; // Name displayed in the dropdown
+      loanPdfSelect.appendChild(option);
+    });
+
+    for (const loan of loanConfig) {
+      // if (!extractedTexts[loan.path]) {
+        const base64 = await getBase64FromPdf(loan.path);
+        const text = await extractLoanTextUsingGemini(base64);
+        const textInJson = extractJSON(text);
+        extractedLoanTexts[loan.path] = textInJson;
+      // }
+    }
+
+    // extractedLoanTexts["all"] = Object.values(extractedLoanTexts)
+    // .filter((text) => typeof text === "object" && text["Complete Extracted Text"]) // Ensure it's an object and has "Complete Extracted Text"
+    // .map((text) => text["Complete Extracted Text"]) // Extract "Complete Extracted Text"
+    // .join("\n\n---\n\n"); // Join with separators
+
+    console.log("User Data:",state.undertakingPdfs);
+    console.log("Loan PDF Data:",state.loanPdfs);
+    console.log("Excel Data:",state.undertakingExcel);
     // Save Excel data to local storage for future use
+    localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
-    console.error("Excel Error:", error.message);
     showError(error.message);
   } finally {
     // Hide loading indicator
@@ -671,14 +746,12 @@ async function getBase64FromPdf(url) {
 
 async function extractTextUsingGemini(base64Pdf) {
   try {
-    console.log(base64Pdf);
     const response = await fetch(
       "https://llmfoundry.straive.com/gemini/v1beta/models/gemini-1.5-flash-latest:generateContent",
       {
         method: "POST",
         headers: {
-          Authorization:
-            `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -732,7 +805,6 @@ return in json format only.
     }
 
     const data = await response.json();
-    console.log(data.candidates?.[0]?.content?.parts?.[0]?.text);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   } catch (error) {
     throw new Error(`Gemini API error: ${error.message}`);
@@ -741,14 +813,13 @@ return in json format only.
 
 async function extractExcelInfoUsingGemini(excelData) {
   try {
-    console.log("Excel Data", excelData);
     const response = await fetch(
       "https://llmfoundry.straive.com/gemini/v1beta/models/gemini-1.5-flash-latest:generateContent",
       {
         method: "POST",
         headers: {
           Authorization:
-            "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImtyaXNobmEua3VtYXJAZ3JhbWVuZXIuY29tIn0.QY0QNLADfGARpZvcew8DJgrtMtdxJ8NHUn9_qnSiWEM:llmproxy-playground",
+            `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         credentials: "include",
@@ -796,7 +867,65 @@ return in json format only.
     }
 
     const data = await response.json();
-    console.log(data.candidates?.[0]?.content?.parts?.[0]?.text);
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  } catch (error) {
+    throw new Error(`Gemini API error: ${error.message}`);
+  }
+}
+
+async function extractLoanTextUsingGemini(base64Pdf) {
+  try {
+    const response = await fetch(
+      "https://llmfoundry.straive.com/gemini/v1beta/models/gemini-1.5-flash-latest:generateContent",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [
+              {
+                text: `Extract and return only the text content from the provided PDF.
+                Data Should be in following format :-
+                {
+                Complete Extracted Text,
+                Borrower,
+                Loan Id,
+                Late Fee amount,
+                Payment Return Amount
+              }
+return in json format only.
+                `,
+              },
+            ],
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: "This is a PDF document for text extraction." }, // Added the `text` field to describe the PDF
+                {
+                  inline_data: {
+                    mime_type: "application/pdf",
+                    data: base64Pdf.split(",")[1], // Base64 content excluding the prefix
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `Unexpected error: ${response.status}`);
+    }
+
+    const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   } catch (error) {
     throw new Error(`Gemini API error: ${error.message}`);
