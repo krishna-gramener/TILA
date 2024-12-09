@@ -238,7 +238,7 @@ function generateFinalUndertakingTable() {
   let totalAccountsChecked = 0;
   let accountsWithIncorrectData = 0;
   let incorrectOnFields = {
-    "APR": 0,
+    "Annual Percentage Rate (APR)": 0,
     "Finance Charge": 0,
     "Amount Financed": 0,
     "Total of Payments": 0,
