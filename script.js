@@ -4,9 +4,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4
 
 const pdfViewerCard = document.getElementById("undertakingPdfViewerCard");
 const pdfViewer = document.getElementById("undertakingPdfViewer");
-const CACHE_KEY = "pdfExtractCache";
-const CACHE_KEY_EXCEL = "excelData";
-const CACHE_KEY_LOAN="loanData";
+const CACHE_KEY = "PdfData";
+const CACHE_KEY_EXCEL = "ExcelData";
+const CACHE_KEY_LOAN="LoanData";
 
 const state = {
   undertakingPdfs: {},
@@ -234,33 +234,18 @@ function generateFinalUndertakingTable() {
   const pdfDataArray = state.undertakingPdfs; // Array of PDF data objects
   const excelDataArray = state.undertakingExcel; // Array of Excel data objects
 
-  // Initialize counters for the summary table
+  // Initialize counters and mismatch trackers
   let totalAccountsChecked = 0;
   let accountsWithIncorrectData = 0;
-  let incorrectOnFields = {
-    "Annual Percentage Rate (APR)": 0,
-    "Finance Charge": 0,
-    "Amount Financed": 0,
-    "Total of Payments": 0,
-    "Number of Payments": 0,
-    "Monthly Payment Amount": 0,
-    "Origination Fee": 0,
+  let incorrectAccountsByField = {
+    "Annual Percentage Rate (APR)": [],
+    "Finance Charge": [],
+    "Amount Financed": [],
+    "Total of Payments": [],
+    "Number of Payments": [],
+    "Monthly Payment Amount": [],
+    "Origination Fee": [],
   };
-
-  // Initialize table for detailed data
-  let detailedTable = `
-      <table class="table table-striped">
-        <thead>
-          <tr>
-            <th>Application ID</th>
-            <th>Loan ID</th>
-            <th>Booking Date</th>
-            <th>Origination Fee Charges (per TILA)</th>
-            <th>Origination Fee Charges (per Excel)</th>
-            <th>Mismatch</th>
-          </tr>
-        </thead>
-        <tbody>`;
 
   // Iterate through the PDF data array
   Object.entries(pdfDataArray).forEach(([key, pdfData]) => {
@@ -271,10 +256,7 @@ function generateFinalUndertakingTable() {
     if (matchingExcelRow) {
       totalAccountsChecked++;
 
-      // Initialize flag for incorrect data in any field
-      let hasIncorrectData = false;
-
-      // Check for mismatches in specific fields and increment counters
+      // Check for mismatches in specific fields
       for (const field of [
         "Annual Percentage Rate (APR)",
         "Finance Charge",
@@ -292,51 +274,79 @@ function generateFinalUndertakingTable() {
         let pdfValue = parseFloat(pdfData[field]?.replace(/[$,%]/g, "")) || 0;
         let excelValue = parseFloat(matchingExcelRow[excelField]) || 0;
 
-        // Special handling for APR field
-        if (field === "Annual Percentage Rate (APR)") {
-          excelValue = parseFloat((excelValue * 100).toFixed(2)); // Convert to percentage
+        // Special handling for fields with percentage or dollar values
+        if (field === "Annual Percentage Rate (APR)" || field.includes("Percentage")) {
+          excelValue *= 100; // Multiply by 100 for Excel data
         }
 
-        // Round to two decimals for comparison
+        // Ensure both values are truncated to 2 decimal places
         pdfValue = parseFloat(pdfValue.toFixed(2));
         excelValue = parseFloat(excelValue.toFixed(2));
 
-        // Check mismatch and update counters
+        // Track mismatched accounts
         if (pdfValue !== excelValue) {
-          hasIncorrectData = true;
-          incorrectOnFields[field]++;
+          accountsWithIncorrectData++;
+          incorrectAccountsByField[field].push({
+            ApplicationId: matchingExcelRow["Application Id"],
+            LoanId: loanId,
+            BookingDate: matchingExcelRow["Booking Date"] || "N/A",
+            PdfValue: pdfData[field] || "N/A",
+            ExcelValue: excelValue.toFixed(2) || "N/A", // Ensure truncated display
+          });
         }
       }
-
-      // Update the number of accounts with incorrect data
-      if (hasIncorrectData) {
-        accountsWithIncorrectData++;
-      }
-
-      // Check if Origination Fee matches
-      const originationFeePdf = parseFloat(pdfData["Origination Fee"]?.replace(/[$,]/g, "")) || 0;
-      const originationFeeExcel = parseFloat(matchingExcelRow["Origination Fee"]) || 0;
-      const originationFeeMismatch = originationFeePdf.toFixed(2) !== originationFeeExcel.toFixed(2) ? 'Y' : 'N';
-
-      // Add row to the detailed table with application ID, Loan ID, Origination Fee charges, and mismatch column
-      detailedTable += `
-          <tr>
-            <td>${matchingExcelRow["Application Id"]}</td>
-            <td>${loanId}</td>
-            <td>${matchingExcelRow["Booking Date"] || "N/A"}</td>
-            <td>${pdfData["Origination Fee"] || "N/A"}</td>
-            <td>${matchingExcelRow["Origination Fee"].toFixed(2) || "N/A"}</td>
-            <td>${originationFeeMismatch}</td>
-          </tr>`;
     }
   });
 
-  // Close the detailed data table
-  detailedTable += `
-        </tbody>
-      </table>`;
+  // Generate category-wise summary for incorrect accounts
+  let categorySummaryRows = Object.entries(incorrectAccountsByField)
+    .map(([field, accounts]) => {
+      return `
+        <tr>
+          <th>Number of Incorrect Accounts for ${field}</th>
+          <td>${accounts.length}</td>
+        </tr>`;
+    })
+    .join("");
 
-  // Create the summary table with counts
+  // Generate tables for incorrect accounts by field
+  let mismatchTables = Object.entries(incorrectAccountsByField)
+    .map(([field, mismatchedAccounts]) => {
+      if (mismatchedAccounts.length === 0) return ""; // Skip if no mismatches
+
+      const rows = mismatchedAccounts
+        .map(
+          (account) => `
+          <tr>
+            <td>${account.ApplicationId}</td>
+            <td>${account.LoanId}</td>
+            <td>${account.BookingDate}</td>
+            <td>${account.PdfValue}</td>
+            <td>${account.ExcelValue}</td>
+          </tr>`
+        )
+        .join("");
+
+      return `
+        <h3>Incorrect Accounts for ${field}</h3>
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>Application ID</th>
+              <th>Loan ID</th>
+              <th>Booking Date</th>
+              <th>${field} (PDF)</th>
+              <th>${field} (Excel)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>`;
+    })
+    .join("");
+
+  // Generate the summary table
   let summaryTable = `
       <table class="table table-striped mb-4">
         <tbody>
@@ -345,37 +355,25 @@ function generateFinalUndertakingTable() {
             <td>${totalAccountsChecked}</td>
           </tr>
           <tr>
-            <th>Number of Accounts with Incorrect Data</th>
+            <th>Total Accounts with Incorrect Data</th>
             <td>${accountsWithIncorrectData}</td>
           </tr>
-          ${Object.entries(incorrectOnFields)
-            .map(
-              ([field, count]) => `
-          <tr>
-            <th>Number of Accounts Incorrect on ${field}</th>
-            <td>${count}</td>
-          </tr>`
-            )
-            .join("")}
+          ${categorySummaryRows}
         </tbody>
       </table>`;
 
-  // Return both the summary table and the detailed table
+  // Return both the summary table and the mismatch tables
   return {
     summaryTable: summaryTable,
-    detailedTable: detailedTable,
+    mismatchTables: mismatchTables,
   };
 }
 
-function generateCustomerFinalTable(){
-
-  const pdfDataArray = state.undertakingPdfs;
-  const loanDataArray=state.loanPdfs;
-  const selectExcel=state.undertakingExcel;
 
 
 
-}
+
+
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {
   document.getElementById("undertakingSection").style.display = "block";
@@ -557,7 +555,7 @@ document.getElementById("undertakingProcess").addEventListener("click", async ()
 </div>`;
 
   try {
-    const { summaryTable, detailedTable } = generateFinalUndertakingTable();
+    const { summaryTable, mismatchTables } = generateFinalUndertakingTable();
     const undertakingOutput = document.getElementById("undertakingOutput");
 
     // Clear any existing content in the output div
@@ -567,7 +565,7 @@ document.getElementById("undertakingProcess").addEventListener("click", async ()
     undertakingOutput.innerHTML += "<h3>Summary of Incorrect Data</h3>" + summaryTable;
 
     // Insert the detailed table
-    undertakingOutput.innerHTML += "<h3>Detailed Comparison of Accounts</h3>" + detailedTable;
+    undertakingOutput.innerHTML += mismatchTables;
   } catch (error) {
     showError("Processing failed: " + error.message);
   } finally {
@@ -613,7 +611,7 @@ async function loadExcelFiles(filePath, stateKey) {
     state[stateKey] = extractJSON(customerDataExcel);
 
     // Optionally, save the data to localStorage for persistence
-    localStorage.setItem(CACHE_KEY_EXCEL, JSON.stringify(customerDataExcel));
+    localStorage.setItem(CACHE_KEY_EXCEL, JSON.stringify(state[stateKey]));
 
     return excelContent; // Return the parsed data
   } catch (error) {
@@ -670,11 +668,6 @@ async function loadFiles() {
       }
     }
 
-    // // Concatenate all text for "all PDFs" option
-    // extractedTexts["all"] = Object.values(extractedTexts)
-    //   .filter((text) => typeof text === "object" && text["Complete Extracted Text"]) // Ensure it's an object and has "Complete Extracted Text"
-    //   .map((text) => text["Complete Extracted Text"]) // Extract "Complete Extracted Text"
-    //   .join("\n\n---\n\n"); // Join with separators
 
     // Save PDF data to local storage for future use
     localStorage.setItem(CACHE_KEY, JSON.stringify(extractedTexts));
@@ -710,15 +703,6 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
-
-    // extractedLoanTexts["all"] = Object.values(extractedLoanTexts)
-    // .filter((text) => typeof text === "object" && text["Complete Extracted Text"]) // Ensure it's an object and has "Complete Extracted Text"
-    // .map((text) => text["Complete Extracted Text"]) // Extract "Complete Extracted Text"
-    // .join("\n\n---\n\n"); // Join with separators
-
-    // console.log("User Data:",state.undertakingPdfs);
-    // console.log("Loan PDF Data:",state.loanPdfs);
-    // console.log("Excel Data:",state.undertakingExcel);
     // Save Excel data to local storage for future use
     localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
@@ -931,6 +915,19 @@ return in json format only.
     throw new Error(`Gemini API error: ${error.message}`);
   }
 }
+
+// On app load
+const appClosedTime = localStorage.getItem("appClosedTime");
+if (appClosedTime && Date.now() - parseInt(appClosedTime, 10) > 1000 * 60 * 60) {
+  // If last session was over 1 hour ago, clear localStorage
+  localStorage.clear();
+}
+
+// On app close
+window.addEventListener("unload", () => {
+  localStorage.setItem("appClosedTime", Date.now().toString());
+});
+
 
 // Initialize
 await loadFiles().catch((error) => showError(error.message));
