@@ -716,9 +716,9 @@ async function loadFiles() {
     // .map((text) => text["Complete Extracted Text"]) // Extract "Complete Extracted Text"
     // .join("\n\n---\n\n"); // Join with separators
 
-    console.log("User Data:",state.undertakingPdfs);
-    console.log("Loan PDF Data:",state.loanPdfs);
-    console.log("Excel Data:",state.undertakingExcel);
+    // console.log("User Data:",state.undertakingPdfs);
+    // console.log("Loan PDF Data:",state.loanPdfs);
+    // console.log("Excel Data:",state.undertakingExcel);
     // Save Excel data to local storage for future use
     localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
