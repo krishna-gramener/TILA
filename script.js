@@ -182,6 +182,18 @@ function generateExcelTable() {
 
   // Iterate over the field mappings and compare the values
   for (const [pdfField, excelField] of Object.entries(fieldMappings)) {
+    // Handle specific fields with custom logic
+    if (pdfField === "Returned Payment Fee" || pdfField === "Late Charges") {
+      table += `
+        <tr>
+          <td>${pdfField}</td>
+          <td>${pdfData[pdfField] || "N/A"}</td>
+          <td>NA</td>
+          <td>NA</td>
+        </tr>`;
+      continue;
+    }
+
     // PDF value handling (remove $ or %, and parse as number)
     let pdfValueRaw = pdfData[pdfField] !== undefined ? pdfData[pdfField] : "N/A";
     let pdfValue =
@@ -216,7 +228,7 @@ function generateExcelTable() {
       <tr>
         <td>${pdfField}</td>
         <td>${pdfValueRaw}</td>
-        <td>${excelValue==null?0:excelValue}</td>
+        <td>${excelValue == null ? 0 : excelValue}</td>
         <td>${match ? "Y" : "N"}</td>
       </tr>`;
   }
@@ -229,6 +241,7 @@ function generateExcelTable() {
   // Return the table
   return table;
 }
+
 
 function generateFinalUndertakingTable() {
   const pdfDataArray = state.undertakingPdfs; // Array of PDF data objects
