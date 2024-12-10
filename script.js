@@ -15,9 +15,7 @@ const state = {
 const filesUploaded = {
   isUndertakingPdf: false,
   isUndertakingExcel: false,
-  isCustomerPdf: false,
   isCustomerLoanPdf: false,
-  isCustomerExcel: false,
 };
 
 const { token } = await fetch("https://llmfoundry.straive.com/token", { credentials: "include" }).then((r) => r.json());
@@ -27,32 +25,22 @@ if (!token) {
   render(html`<a class="btn btn-primary" href="${url}">Log into LLM Foundry</a></p>`, document.querySelector("#login"));
 }
 
-try {
-  const cached = localStorage.getItem(CACHE_KEY);
-  if (cached) {
-    state.undertakingPdfs = JSON.parse(cached);
+const loadFromCache = (key, stateKey) => {
+  try {
+    const cachedData = localStorage.getItem(key);
+    if (cachedData) {
+      state[stateKey] = JSON.parse(cachedData);
+    }
+  } catch (error) {
+    showError(`Cache loading error for ${key}:`, error);
   }
-} catch (error) {
-  showError("Cache loading error:", error);
-}
+};
 
-try {
-  const cached = localStorage.getItem(CACHE_KEY_EXCEL);
-  if (cached) {
-    state.undertakingExcel = JSON.parse(cached);
-  }
-} catch (error) {
-  showError("Cache loading error:", error);
-}
+// Load cached data
+loadFromCache(CACHE_KEY, "undertakingPdfs");
+loadFromCache(CACHE_KEY_EXCEL, "undertakingExcel");
+loadFromCache(CACHE_KEY_LOAN, "loanPdfs");
 
-try {
-  const cached = localStorage.getItem(CACHE_KEY_LOAN);
-  if (cached) {
-    state.loanPdfs = JSON.parse(cached);
-  }
-} catch (error) {
-  showError("Cache loading error:", error);
-}
 
 // ----------------------------------------------Misc Functions----------------------------------------------
 function extractJSON(data) {
@@ -682,10 +670,7 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
-    // Save Excel data to local storage for future use
-    console.log("Pdf Data", state.undertakingPdfs);
-    console.log("Loan Data", state.loanPdfs);
-    console.log("Excel Data", state.undertakingExcel);
+
 
     localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
