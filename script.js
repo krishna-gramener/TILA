@@ -2,9 +2,9 @@ import { html, render } from "https://cdn.jsdelivr.net/npm/lit-html@3/+esm";
 
 const pdfViewerCard = document.getElementById("undertakingPdfViewerCard");
 const pdfViewer = document.getElementById("undertakingPdfViewer");
-const CACHE_KEY = "PdfData";
-const CACHE_KEY_EXCEL = "ExcelData";
-const CACHE_KEY_LOAN = "LoanData";
+// const CACHE_KEY = "PdfData";
+// const CACHE_KEY_EXCEL = "ExcelData";
+// const CACHE_KEY_LOAN = "LoanData";
 
 const state = {
   undertakingPdfs: {},
@@ -25,21 +25,21 @@ if (!token) {
   render(html`<a class="btn btn-primary" href="${url}">Log into LLM Foundry</a></p>`, document.querySelector("#login"));
 }
 
-const loadFromCache = (key, stateKey) => {
-  try {
-    const cachedData = localStorage.getItem(key);
-    if (cachedData) {
-      state[stateKey] = JSON.parse(cachedData);
-    }
-  } catch (error) {
-    showError(`Cache loading error for ${key}:`, error);
-  }
-};
+// const loadFromCache = (key, stateKey) => {
+//   try {
+//     const cachedData = localStorage.getItem(key);
+//     if (cachedData) {
+//       state[stateKey] = JSON.parse(cachedData);
+//     }
+//   } catch (error) {
+//     showError(`Cache loading error for ${key}:`, error);
+//   }
+// };
 
 // Load cached data
-loadFromCache(CACHE_KEY, "undertakingPdfs");
-loadFromCache(CACHE_KEY_EXCEL, "undertakingExcel");
-loadFromCache(CACHE_KEY_LOAN, "loanPdfs");
+// loadFromCache(CACHE_KEY, "undertakingPdfs");
+// loadFromCache(CACHE_KEY_EXCEL, "undertakingExcel");
+// loadFromCache(CACHE_KEY_LOAN, "loanPdfs");
 
 
 // ----------------------------------------------Misc Functions----------------------------------------------
@@ -133,7 +133,7 @@ function generateExcelTable() {
   // Define the fields to compare and their mappings
   const fieldMappings = {
     Borrower: "Borrower",
-    "Annual Percentage Rate (APR)": "Annual Percentage Rate (APR)",
+    "Annual Percentage Rate (APR)": "APR",
     "Finance Charge": "Finance Charge",
     "Amount Financed": "Amount Financed",
     "Total of Payments": "Total of Payments",
@@ -201,20 +201,34 @@ function generateExcelTable() {
       excelValue = parseFloat(excelValue.toFixed(2));
     }
 
-    // Compare the values for mismatch (normalize strings for comparison only)
-    const match =
-      typeof pdfValue === "number" && typeof excelValue === "number"
-        ? pdfValue.toFixed(2) == excelValue.toFixed(2) // Numeric comparison
-        : typeof pdfValueRaw === "string" && typeof excelValue === "string"
-        ? pdfValueRaw.trim() === excelValue.trim() // String comparison (case-sensitive, original format)
-        : pdfValue == excelValue;
+    // Format values for display
+    const formattedPdfValue =
+      pdfField === "Annual Percentage Rate (APR)"
+        ? `${pdfValueRaw}`
+        : ["Finance Charge", "Amount Financed", "Total of Payments", "Monthly Payment Amount", "Origination Fee"].includes(
+            pdfField
+          )
+        ? `${pdfValueRaw}`
+        : pdfValueRaw;
+
+    const formattedExcelValue =
+      pdfField === "Annual Percentage Rate (APR)"
+        ? `${excelValue}%`
+        : ["Finance Charge", "Amount Financed", "Total of Payments", "Monthly Payment Amount", "Origination Fee"].includes(
+            pdfField
+          )
+        ? `$${excelValue}`
+        : excelValue;
+
+    // Compare the values for mismatch
+    const match = pdfValue == excelValue;
 
     // Add a row to the table
     table += `
       <tr>
         <td>${pdfField}</td>
-        <td>${pdfValueRaw}</td>
-        <td>${excelValue == null ? 0 : excelValue}</td>
+        <td>${formattedPdfValue}</td>
+        <td>${formattedExcelValue}</td>
         <td>${match ? "Y" : "N"}</td>
       </tr>`;
   }
@@ -222,11 +236,13 @@ function generateExcelTable() {
   // Close the table
   table += `
       </tbody>
-    </table>`;
+    </table>
+    <p><strong>Note</strong> : If payment is returned, returned payment charge of $20 is applicable</p>`;
 
   // Return the table
   return table;
 }
+
 
 function generateFinalUndertakingTable() {
   const pdfDataArray = state.undertakingPdfs; // Array of PDF data objects
@@ -245,6 +261,17 @@ function generateFinalUndertakingTable() {
     "Origination Fee": [],
   };
 
+  // Field mapping between PDF and Excel
+  const fieldMapping = {
+    "Annual Percentage Rate (APR)": "APR",
+    "Finance Charge": "Finance Charge",
+    "Amount Financed": "Amount Financed",
+    "Total of Payments": "Total of Payments",
+    "Number of Payments": "Number of Payments",
+    "Monthly Payment Amount": "EMI Amount", // Map Monthly Payment Amount to EMI Amount
+    "Origination Fee": "Origination Fee",
+  };
+
   // Iterate through the PDF data array
   Object.entries(pdfDataArray).forEach(([key, pdfData]) => {
     if (key === "all") return; // Skip summary objects if present
@@ -255,24 +282,13 @@ function generateFinalUndertakingTable() {
       totalAccountsChecked++;
 
       // Check for mismatches in specific fields
-      for (const field of [
-        "Annual Percentage Rate (APR)",
-        "Finance Charge",
-        "Amount Financed",
-        "Total of Payments",
-        "Number of Payments",
-        "Monthly Payment Amount",
-        "Origination Fee",
-      ]) {
-        // Map Monthly Payment Amount to EMI Amount in Excel
-        const excelField = field === "Monthly Payment Amount" ? "EMI Amount" : field;
-
+      for (const [pdfField, excelField] of Object.entries(fieldMapping)) {
         // Parse PDF and Excel values consistently
-        let pdfValue = parseFloat(pdfData[field]?.replace(/[$,%]/g, "")) || 0;
+        let pdfValue = parseFloat(pdfData[pdfField]?.replace(/[$,%]/g, "")) || 0;
         let excelValue = parseFloat(matchingExcelRow[excelField]) || 0;
 
         // Special handling for fields with percentage or dollar values
-        if (field === "Annual Percentage Rate (APR)" || field.includes("Percentage")) {
+        if (pdfField === "Annual Percentage Rate (APR)") {
           excelValue *= 100; // Multiply by 100 for Excel data
         }
 
@@ -283,12 +299,21 @@ function generateFinalUndertakingTable() {
         // Track mismatched accounts
         if (pdfValue !== excelValue) {
           accountsWithIncorrectData++;
-          incorrectAccountsByField[field].push({
+
+          // Format `ExcelValue` for display
+          const formattedExcelValue =
+            pdfField === "Annual Percentage Rate (APR)"
+              ? `${excelValue}%`
+              : ["Finance Charge", "Amount Financed", "Total of Payments", "Monthly Payment Amount", "Origination Fee"].includes(pdfField)
+              ? `$${excelValue}`
+              : excelValue;
+
+          incorrectAccountsByField[pdfField].push({
             ApplicationId: matchingExcelRow["Application Id"],
             LoanId: loanId,
             BookingDate: matchingExcelRow["Booking Date"] || "N/A",
-            PdfValue: pdfData[field] || "N/A",
-            ExcelValue: excelValue.toFixed(2) || "N/A", // Ensure truncated display
+            PdfValue: pdfData[pdfField] || "N/A",
+            ExcelValue: formattedExcelValue || "N/A", // Ensure formatted display
           });
         }
       }
@@ -332,8 +357,8 @@ function generateFinalUndertakingTable() {
               <th>Application ID</th>
               <th>Loan ID</th>
               <th>Booking Date</th>
-              <th>${field} (PDF)</th>
-              <th>${field} (Excel)</th>
+              <th>${field} (TILA)</th>
+              <th>${field} (Production)</th>
             </tr>
           </thead>
           <tbody>
@@ -385,24 +410,50 @@ function generateLoanIndividualReport() {
   const cleanValue = (value) =>
     typeof value === "string" ? parseFloat(value.replace(/[$,%]/g, "")) || value : value !== undefined ? value : "NA";
 
+  const formatCurrency = (feature, value) =>
+    ["Returned Payment Fee", "Late Charges"].includes(feature) && value !== "NA" && !isNaN(value)
+      ? `$${value}`
+      : value;
+
   const mapExcelData = (feature) => {
-    if (feature === "Returned Payment Fee") return cleanValue(excelData["Returned Payment Charges"])?.toFixed(2) || "NA";
+    if (feature === "Returned Payment Fee") {
+      return formatCurrency(feature, cleanValue(excelData["Returned Payment Charges"])?.toFixed(2) || "NA");
+    }
     if (feature === "Account Number") return cleanValue(excelData["Loan Id"]) || "NA";
-    if (feature === "Late Charges") return cleanValue(excelData["Late Fee Charges"])?.toFixed(2) || "NA";
+    if (feature === "Late Charges") {
+      return formatCurrency(feature, cleanValue(excelData["Late Fee Charges"])?.toFixed(2) || "NA");
+    }
     return excelData[feature] != null ? cleanValue(excelData[feature]) : "NA";
   };
 
   const mapLoanData = (feature) => {
     if (feature === "Borrower") return loanData[feature] || "NA";
-    if (feature === "Returned Payment Fee") return cleanValue(loanData["Payment Return Amount"]) || "NA";
-    if (feature === "Late Charges") return cleanValue(loanData["Late Fee amount"]) || "NA";
     if (feature === "Account Number") return loanData["Loan Id"] || "NA";
+
+    if (feature === "Returned Payment Fee") {
+      const returnedPaymentFee = loanData["Payment Return Amount"];
+      return returnedPaymentFee !== null
+        ? formatCurrency(feature, cleanValue(returnedPaymentFee))
+        : "NA";
+    }
+
+    if (feature === "Late Charges") {
+      const returnedPaymentFee = loanData["Payment Return Amount"];
+      const lateCharges = returnedPaymentFee === null ? loanData["Late Fee amount"] : "NA";
+      return formatCurrency(feature, cleanValue(lateCharges) || "NA");
+    }
+
     return cleanValue(loanData[feature]) || "NA";
   };
 
   const tableRows = features
     .map((feature) => {
-      const pdfValue = cleanValue(pdfData[feature]);
+      let pdfValue = cleanValue(pdfData[feature]);
+      if (feature === "Late Charges") {
+        pdfValue = 7; // Set Late Charges to 7 for TILA Data
+      }
+      pdfValue = formatCurrency(feature, pdfValue);
+
       const excelValue = mapExcelData(feature);
       const loanValue = mapLoanData(feature);
 
@@ -410,7 +461,7 @@ function generateLoanIndividualReport() {
         <tr>
           <td>${feature}</td>
           <td>${loanValue}</td>
-          <td>${pdfValue}</td>
+          <td>${pdfValue !== undefined ? pdfValue : "NA"}</td>
           <td>${excelValue}</td>
         </tr>`;
     })
@@ -429,9 +480,20 @@ function generateLoanIndividualReport() {
       <tbody>
         ${tableRows}
       </tbody>
-    </table>`;
+    </table>
+    <p><strong>Note :</strong></p>
+    <p>1) If payment is returned, returned payment charge of $20 is applicable</p>
+    <p>2) 5% of the unpaid installment; up to max of $7</p>`;
 }
 
+function generateFinalCmTable(){
+  const pdfArray = state.undertakingPdfs;
+  const excelArray = state.undertakingExcel;
+  const selectedLoanId = document.querySelector("#loanPdfSelect").value;
+  const loanArray = state.loanPdfs;
+
+
+}
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {
   document.getElementById("undertakingSection").style.display = "block";
@@ -594,7 +656,7 @@ async function loadExcelFiles(filePath, stateKey) {
     state[stateKey] = extractJSON(customerDataExcel);
 
     // Optionally, save the data to localStorage for persistence
-    localStorage.setItem(CACHE_KEY_EXCEL, JSON.stringify(state[stateKey]));
+    // localStorage.setItem(CACHE_KEY_EXCEL, JSON.stringify(state[stateKey]));
 
     return excelContent; // Return the parsed data
   } catch (error) {
@@ -610,6 +672,9 @@ async function loadFiles() {
   const loanPdfSelect = document.getElementById("loanPdfSelect");
   const extractedTexts = state.undertakingPdfs;
   const extractedLoanTexts = state.loanPdfs;
+  const customerTila=document.getElementById("customerPdfSelect");
+  const customerExcel=document.getElementById("customerExcelSelect");
+
   try {
     // Show loading indicator
     toggleLoading(true);
@@ -629,6 +694,9 @@ async function loadFiles() {
       option.value = pdf.path; // Path will be used for loading
       option.textContent = pdf.name; // Name displayed in the dropdown
       undertakingPdfSelect.appendChild(option);
+
+      const customerPdfOption=option.cloneNode(true);
+      customerTila.append(customerPdfOption);
     });
 
     // Preload and cache PDF texts (optional)
@@ -641,13 +709,17 @@ async function loadFiles() {
       }
     }
     // Save PDF data to local storage for future use
-    localStorage.setItem(CACHE_KEY, JSON.stringify(extractedTexts));
+    // localStorage.setItem(CACHE_KEY, JSON.stringify(extractedTexts));
+
     // Populate the Excel dropdown
     excelConfig.forEach((excel) => {
       const option = document.createElement("option");
       option.value = excel.path; // Path will be used for loading
       option.textContent = excel.name; // Name displayed in the dropdown
       undertakingExcelSelect.appendChild(option);
+
+      const customerExcelOption=option.cloneNode(true);
+      customerExcel.append(customerExcelOption);
     });
 
     // Preload and cache Excel data (optional)
@@ -671,8 +743,13 @@ async function loadFiles() {
       }
     }
 
+    // Save Excel data to local storage for future use
+    //  console.log("Pdf Data", state.undertakingPdfs);
+    //  console.log("Loan Data", state.loanPdfs);
+    //  console.log("Excel Data", state.undertakingExcel);
 
-    localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
+
+    // localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
     showError(error.message);
   } finally {
@@ -784,7 +861,7 @@ async function extractExcelInfoUsingGemini(excelData) {
                 Application Id,
                 Loan Id,
 Borrower,
-Annual Percentage Rate (APR),
+APR,
 Finance Charge,
 Amount Financed,
 Total of Payments,
