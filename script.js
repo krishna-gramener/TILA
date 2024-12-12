@@ -417,11 +417,11 @@ function generateLoanIndividualReport() {
 
   const mapExcelData = (feature) => {
     if (feature === "Returned Payment Fee") {
-      return formatCurrency(feature, cleanValue(excelData["Returned Payment Charges"])?.toFixed(2) || "NA");
+      return cleanValue(excelData["Returned Payment Charges"])?.toFixed(2) || "NA";
     }
     if (feature === "Account Number") return cleanValue(excelData["Loan Id"]) || "NA";
     if (feature === "Late Charges") {
-      return formatCurrency(feature, cleanValue(excelData["Late Fee Charges"])?.toFixed(2) || "NA");
+      return cleanValue(excelData["Late Fee Charges"])?.toFixed(2) || "NA";
     }
     return excelData[feature] != null ? cleanValue(excelData[feature]) : "NA";
   };
@@ -432,15 +432,13 @@ function generateLoanIndividualReport() {
 
     if (feature === "Returned Payment Fee") {
       const returnedPaymentFee = loanData["Payment Return Amount"];
-      return returnedPaymentFee !== null
-        ? formatCurrency(feature, cleanValue(returnedPaymentFee))
-        : "NA";
+      return returnedPaymentFee !== null ? cleanValue(returnedPaymentFee) : "NA";
     }
 
     if (feature === "Late Charges") {
       const returnedPaymentFee = loanData["Payment Return Amount"];
       const lateCharges = returnedPaymentFee === null ? loanData["Late Fee amount"] : "NA";
-      return formatCurrency(feature, cleanValue(lateCharges) || "NA");
+      return cleanValue(lateCharges) || "NA";
     }
 
     return cleanValue(loanData[feature]) || "NA";
@@ -449,20 +447,26 @@ function generateLoanIndividualReport() {
   const tableRows = features
     .map((feature) => {
       let pdfValue = cleanValue(pdfData[feature]);
-      if (feature === "Late Charges") {
-        pdfValue = 7; // Set Late Charges to 7 for TILA Data
-      }
-      pdfValue = formatCurrency(feature, pdfValue);
+      if (feature === "Late Charges") pdfValue = 7; // Set Late Charges to 7 for TILA Data
 
       const excelValue = mapExcelData(feature);
       const loanValue = mapLoanData(feature);
 
+      // Perform comparison before formatting
+      const isMatch = loanValue == pdfValue && pdfValue == excelValue ? "Y" : "N";
+
+      // Format the values after matching
+      const formattedLoanValue = formatCurrency(feature, loanValue);
+      const formattedPdfValue = formatCurrency(feature, pdfValue);
+      const formattedExcelValue = formatCurrency(feature, excelValue);
+
       return `
         <tr>
           <td>${feature}</td>
-          <td>${loanValue}</td>
-          <td>${pdfValue !== undefined ? pdfValue : "NA"}</td>
-          <td>${excelValue}</td>
+          <td>${formattedLoanValue}</td>
+          <td>${formattedPdfValue !== undefined ? formattedPdfValue : "NA"}</td>
+          <td>${formattedExcelValue}</td>
+          <td>${isMatch}</td>
         </tr>`;
     })
     .join("");
@@ -475,6 +479,7 @@ function generateLoanIndividualReport() {
           <th>Customer Comm. Data</th>
           <th>Tila Data</th>
           <th>Production Data</th>
+          <th>Match</th>
         </tr>
       </thead>
       <tbody>
@@ -486,14 +491,175 @@ function generateLoanIndividualReport() {
     <p>2) 5% of the unpaid installment; up to max of $7</p>`;
 }
 
-function generateFinalCmTable(){
+function generateFinalCmTable() {
   const pdfArray = state.undertakingPdfs;
   const excelArray = state.undertakingExcel;
-  const selectedLoanId = document.querySelector("#loanPdfSelect").value;
   const loanArray = state.loanPdfs;
 
+  if (!loanArray || !Object.keys(loanArray).length) {
+    return `<p>No loan data available.</p>`;
+  }
 
+  let totalAccounts = 0;
+  let incorrectAccounts = 0;
+  const incorrectCountsByCategory = {}; // To track incorrect counts per category
+
+  const discrepancyData = {};
+
+  const cleanValue = (value) =>
+    typeof value === "string" ? parseFloat(value.replace(/[$,%]/g, "")) || value : value !== undefined ? value : "NA";
+
+  const formatCurrency = (value) => {
+    if (value === "NA" || value === null) return "NA";
+    if (!isNaN(value)) return `$${parseFloat(value).toFixed(2)}`; // Truncate to 2 decimal places
+    return value;
+  };
+
+  Object.values(loanArray).forEach((loanData) => {
+    totalAccounts++;
+    const loanId = loanData["Loan Id"];
+    const pdfData = Object.values(pdfArray).find((item) => item["Account Number"] === loanId) || {};
+    const excelData = excelArray.find((item) => item["Loan Id"] == loanId) || {};
+    const bookingDate = excelData["Booking Date"] || "NA";
+    const paymentMonthDate = excelData["Month Date"] || "NA";
+    let hasIncorrectDetails = false;
+
+    const addDiscrepancy = (category, pdfValue, loanValue, excelValue) => {
+      if (!discrepancyData[category]) {
+        discrepancyData[category] = [];
+        incorrectCountsByCategory[category] = 0; // Initialize count for this category
+      }
+      discrepancyData[category].push({
+        loanId,
+        bookingDate,
+        paymentMonthDate,
+        pdf: formatCurrency(pdfValue),
+        loan: formatCurrency(loanValue),
+        excel: formatCurrency(excelValue),
+      });
+      incorrectCountsByCategory[category]++; // Increment count for this category
+      hasIncorrectDetails = true;
+    };
+
+    // Returned Payment Fee Comparison
+    const pdfReturnedFee = cleanValue(pdfData["Returned Payment Fee"]);
+    const loanReturnedFee = cleanValue(loanData["Payment Return Amount"]); // Loan data mapping
+    const excelReturnedFee = cleanValue(excelData["Returned Payment Charges"]); // Excel data mapping
+
+    if (
+      loanReturnedFee !== pdfReturnedFee ||
+      loanReturnedFee !== excelReturnedFee ||
+      pdfReturnedFee !== excelReturnedFee
+    ) {
+      addDiscrepancy("Returned Payment Fee", pdfReturnedFee, loanReturnedFee, excelReturnedFee);
+    }
+
+    // Late Charges Comparison
+    const pdfLateCharges = cleanValue(pdfData["Late Charges"]);
+    const loanLateCharges = cleanValue(loanData["Late Fee amount"]); // Loan data mapping
+    const excelLateCharges = cleanValue(excelData["Late Fee Charges"]); // Excel data mapping
+
+    if (
+      loanLateCharges !== pdfLateCharges ||
+      loanLateCharges !== excelLateCharges ||
+      pdfLateCharges !== excelLateCharges
+    ) {
+      addDiscrepancy("Late Charges", pdfLateCharges, loanLateCharges, excelLateCharges);
+    }
+
+    if (hasIncorrectDetails) {
+      incorrectAccounts++;
+    }
+  });
+
+  // Generate Summary Table
+  const categorySummaryRows = Object.keys(incorrectCountsByCategory)
+    .map(
+      (category) => `
+        <tr>
+          <td>${category}</td>
+          <td>${incorrectCountsByCategory[category]}</td>
+        </tr>`
+    )
+    .join("");
+
+  const summaryTable = `
+    <table class="table table-striped">
+    <h3>Summary</h3>
+      <thead>
+        <tr>
+          <th>Total Accounts Checked</th>
+          <td>${totalAccounts}</td>
+          </tr>
+          </thead>
+          <tbody>
+          <tr>
+          <th>Accounts with Incorrect Details</th>
+          <td>${incorrectAccounts}</td>
+        </tr>
+      </tbody>
+    </table>
+    <h4>Category-Wise Incorrect Accounts</h4>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Incorrect Accounts</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${categorySummaryRows}
+      </tbody>
+    </table>`;
+
+  // Generate Category-Wise Tables
+  const categoryTables = Object.keys(discrepancyData)
+    .map((category) => {
+      const rows = discrepancyData[category]
+        .map((row) => {
+          const { loanId, bookingDate, paymentMonthDate, pdf, loan, excel } = row;
+          return `
+            <tr>
+              <td>${loanId}</td>
+              <td>${bookingDate}</td>
+              <td>${paymentMonthDate}</td>
+              <td>${category==="Late Charges" &&loan==="$25.00"?"NA":loan}</td>
+              <td>${category==="Late Charges"?formatCurrency(7):pdf}</td>
+              <td>${excel}</td>
+            </tr>`;
+        })
+        .join("");
+
+      return `
+      <table class="table table-striped my-4">
+      <h4>Accounts with Incorrect ${category}</h4>
+          <thead>
+            <tr>
+              <th>Loan Id</th>
+              <th>Booking Date</th>
+              <th>Payment Month Date</th>
+              <th>${category} (Customer Comm.)</th>
+              <th>${category} (TILA)</th>
+              <th>${category} (Production Data)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || "<tr><td colspan='6'>No discrepancies found.</td></tr>"}
+          </tbody>
+        </table>`;
+    })
+    .join("");
+
+  // Combine Tables
+  return `
+    <div>
+      ${summaryTable}
+      ${categoryTables}
+    </div>`;
 }
+
+
+
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {
   document.getElementById("undertakingSection").style.display = "block";
@@ -629,6 +795,11 @@ document.getElementById("customerProcess").addEventListener("click", () => {
   document.getElementById("customerOutput").innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
   try {
 
+    const table=generateFinalCmTable();
+    const customerOutput = document.getElementById("customerOutput");
+    customerOutput.innerHTML = "";
+    customerOutput.innerHTML +=  table;
+
   } catch (error) {
     showError("Processing failed: " + error.message);
   } finally {
@@ -743,12 +914,12 @@ async function loadFiles() {
       }
     }
 
+    console.log("Pdf Data", state.undertakingPdfs);
+    console.log("Loan Data", state.loanPdfs);
+    console.log("Excel Data", state.undertakingExcel);
+
+
     // Save Excel data to local storage for future use
-    //  console.log("Pdf Data", state.undertakingPdfs);
-    //  console.log("Loan Data", state.loanPdfs);
-    //  console.log("Excel Data", state.undertakingExcel);
-
-
     // localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
     showError(error.message);
@@ -870,7 +1041,8 @@ Number of Payments,
 Returned Payment Charges,
 Origination Fee,
 Booking Date,
-Late Fee Charges
+Late Fee Charges,
+Month Date
               }
 return in json format only.
                 `,
@@ -961,16 +1133,16 @@ return in json format only.
 }
 
 // On app load
-const appClosedTime = localStorage.getItem("appClosedTime");
-if (appClosedTime && Date.now() - parseInt(appClosedTime, 10) > 1000 * 60 * 60) {
-  // If last session was over 1 hour ago, clear localStorage
-  localStorage.clear();
-}
+// const appClosedTime = localStorage.getItem("appClosedTime");
+// if (appClosedTime && Date.now() - parseInt(appClosedTime, 10) > 1000 * 60 * 60) {
+//   // If last session was over 1 hour ago, clear localStorage
+//   localStorage.clear();
+// }
 
-// On app close
-window.addEventListener("unload", () => {
-  localStorage.setItem("appClosedTime", Date.now().toString());
-});
+// // On app close
+// window.addEventListener("unload", () => {
+//   localStorage.setItem("appClosedTime", Date.now().toString());
+// });
 
 // Initialize
 await loadFiles().catch((error) => showError(error.message));
