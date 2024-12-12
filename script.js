@@ -2,9 +2,6 @@ import { html, render } from "https://cdn.jsdelivr.net/npm/lit-html@3/+esm";
 
 const pdfViewerCard = document.getElementById("undertakingPdfViewerCard");
 const pdfViewer = document.getElementById("undertakingPdfViewer");
-// const CACHE_KEY = "PdfData";
-// const CACHE_KEY_EXCEL = "ExcelData";
-// const CACHE_KEY_LOAN = "LoanData";
 
 const state = {
   undertakingPdfs: {},
@@ -24,24 +21,6 @@ if (!token) {
   const url = "https://llmfoundry.straive.com/login?" + new URLSearchParams({ next: location.href });
   render(html`<a class="btn btn-primary" href="${url}">Log into LLM Foundry</a></p>`, document.querySelector("#login"));
 }
-
-// const loadFromCache = (key, stateKey) => {
-//   try {
-//     const cachedData = localStorage.getItem(key);
-//     if (cachedData) {
-//       state[stateKey] = JSON.parse(cachedData);
-//     }
-//   } catch (error) {
-//     showError(`Cache loading error for ${key}:`, error);
-//   }
-// };
-
-// Load cached data
-// loadFromCache(CACHE_KEY, "undertakingPdfs");
-// loadFromCache(CACHE_KEY_EXCEL, "undertakingExcel");
-// loadFromCache(CACHE_KEY_LOAN, "loanPdfs");
-
-
 // ----------------------------------------------Misc Functions----------------------------------------------
 function extractJSON(data) {
   const jsonPattern = /```json([\s\S]*?)```/;
@@ -205,18 +184,26 @@ function generateExcelTable() {
     const formattedPdfValue =
       pdfField === "Annual Percentage Rate (APR)"
         ? `${pdfValueRaw}`
-        : ["Finance Charge", "Amount Financed", "Total of Payments", "Monthly Payment Amount", "Origination Fee"].includes(
-            pdfField
-          )
+        : [
+            "Finance Charge",
+            "Amount Financed",
+            "Total of Payments",
+            "Monthly Payment Amount",
+            "Origination Fee",
+          ].includes(pdfField)
         ? `${pdfValueRaw}`
         : pdfValueRaw;
 
     const formattedExcelValue =
       pdfField === "Annual Percentage Rate (APR)"
         ? `${excelValue}%`
-        : ["Finance Charge", "Amount Financed", "Total of Payments", "Monthly Payment Amount", "Origination Fee"].includes(
-            pdfField
-          )
+        : [
+            "Finance Charge",
+            "Amount Financed",
+            "Total of Payments",
+            "Monthly Payment Amount",
+            "Origination Fee",
+          ].includes(pdfField)
         ? `$${excelValue}`
         : excelValue;
 
@@ -242,7 +229,6 @@ function generateExcelTable() {
   // Return the table
   return table;
 }
-
 
 function generateFinalUndertakingTable() {
   const pdfDataArray = state.undertakingPdfs; // Array of PDF data objects
@@ -304,7 +290,13 @@ function generateFinalUndertakingTable() {
           const formattedExcelValue =
             pdfField === "Annual Percentage Rate (APR)"
               ? `${excelValue}%`
-              : ["Finance Charge", "Amount Financed", "Total of Payments", "Monthly Payment Amount", "Origination Fee"].includes(pdfField)
+              : [
+                  "Finance Charge",
+                  "Amount Financed",
+                  "Total of Payments",
+                  "Monthly Payment Amount",
+                  "Origination Fee",
+                ].includes(pdfField)
               ? `$${excelValue}`
               : excelValue;
 
@@ -411,9 +403,7 @@ function generateLoanIndividualReport() {
     typeof value === "string" ? parseFloat(value.replace(/[$,%]/g, "")) || value : value !== undefined ? value : "NA";
 
   const formatCurrency = (feature, value) =>
-    ["Returned Payment Fee", "Late Charges"].includes(feature) && value !== "NA" && !isNaN(value)
-      ? `$${value}`
-      : value;
+    ["Returned Payment Fee", "Late Charges"].includes(feature) && value !== "NA" && !isNaN(value) ? `$${value}` : value;
 
   const mapExcelData = (feature) => {
     if (feature === "Returned Payment Fee") {
@@ -623,8 +613,8 @@ function generateFinalCmTable() {
               <td>${loanId}</td>
               <td>${bookingDate}</td>
               <td>${paymentMonthDate}</td>
-              <td>${category==="Late Charges" &&loan==="$25.00"?"NA":loan}</td>
-              <td>${category==="Late Charges"?formatCurrency(7):pdf}</td>
+              <td>${category === "Late Charges" && loan === "$25.00" ? "NA" : loan}</td>
+              <td>${category === "Late Charges" ? formatCurrency(7) : pdf}</td>
               <td>${excel}</td>
             </tr>`;
         })
@@ -657,8 +647,6 @@ function generateFinalCmTable() {
       ${categoryTables}
     </div>`;
 }
-
-
 
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {
@@ -758,7 +746,6 @@ document.getElementById("undertakingExcelSelect").addEventListener("change", asy
   const individualReportCard = document.getElementById("undertakingIndividualReportCard");
 
   try {
-
     loadingSpinner.classList.remove("d-none");
     individualReportCard.classList.add("d-none");
 
@@ -777,7 +764,9 @@ document.getElementById("undertakingExcelSelect").addEventListener("change", asy
 
 // ------------------------------------------Process Buttons-------------------------------------------
 document.getElementById("undertakingProcess").addEventListener("click", (e) => {
-  document.getElementById("undertakingOutput").innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
+  document.getElementById(
+    "undertakingOutput"
+  ).innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
   try {
     const { summaryTable, mismatchTables } = generateFinalUndertakingTable();
     const undertakingOutput = document.getElementById("undertakingOutput");
@@ -794,12 +783,10 @@ document.getElementById("undertakingProcess").addEventListener("click", (e) => {
 document.getElementById("customerProcess").addEventListener("click", () => {
   document.getElementById("customerOutput").innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
   try {
-
-    const table=generateFinalCmTable();
+    const table = generateFinalCmTable();
     const customerOutput = document.getElementById("customerOutput");
     customerOutput.innerHTML = "";
-    customerOutput.innerHTML +=  table;
-
+    customerOutput.innerHTML += table;
   } catch (error) {
     showError("Processing failed: " + error.message);
   } finally {
@@ -826,9 +813,6 @@ async function loadExcelFiles(filePath, stateKey) {
     const customerDataExcel = await extractExcelInfoUsingGemini(excelContent);
     state[stateKey] = extractJSON(customerDataExcel);
 
-    // Optionally, save the data to localStorage for persistence
-    // localStorage.setItem(CACHE_KEY_EXCEL, JSON.stringify(state[stateKey]));
-
     return excelContent; // Return the parsed data
   } catch (error) {
     showError("Error loading Excel file:", error);
@@ -843,8 +827,8 @@ async function loadFiles() {
   const loanPdfSelect = document.getElementById("loanPdfSelect");
   const extractedTexts = state.undertakingPdfs;
   const extractedLoanTexts = state.loanPdfs;
-  const customerTila=document.getElementById("customerPdfSelect");
-  const customerExcel=document.getElementById("customerExcelSelect");
+  const customerTila = document.getElementById("customerPdfSelect");
+  const customerExcel = document.getElementById("customerExcelSelect");
 
   try {
     // Show loading indicator
@@ -866,7 +850,7 @@ async function loadFiles() {
       option.textContent = pdf.name; // Name displayed in the dropdown
       undertakingPdfSelect.appendChild(option);
 
-      const customerPdfOption=option.cloneNode(true);
+      const customerPdfOption = option.cloneNode(true);
       customerTila.append(customerPdfOption);
     });
 
@@ -879,9 +863,6 @@ async function loadFiles() {
         extractedTexts[pdf.path] = textInJson;
       }
     }
-    // Save PDF data to local storage for future use
-    // localStorage.setItem(CACHE_KEY, JSON.stringify(extractedTexts));
-
     // Populate the Excel dropdown
     excelConfig.forEach((excel) => {
       const option = document.createElement("option");
@@ -889,7 +870,7 @@ async function loadFiles() {
       option.textContent = excel.name; // Name displayed in the dropdown
       undertakingExcelSelect.appendChild(option);
 
-      const customerExcelOption=option.cloneNode(true);
+      const customerExcelOption = option.cloneNode(true);
       customerExcel.append(customerExcelOption);
     });
 
@@ -913,14 +894,6 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
-
-    console.log("Pdf Data", state.undertakingPdfs);
-    console.log("Loan Data", state.loanPdfs);
-    console.log("Excel Data", state.undertakingExcel);
-
-
-    // Save Excel data to local storage for future use
-    // localStorage.setItem(CACHE_KEY_LOAN, JSON.stringify(extractedLoanTexts));
   } catch (error) {
     showError(error.message);
   } finally {
@@ -1131,18 +1104,6 @@ return in json format only.
     throw new Error(`Gemini API error: ${error.message}`);
   }
 }
-
-// On app load
-// const appClosedTime = localStorage.getItem("appClosedTime");
-// if (appClosedTime && Date.now() - parseInt(appClosedTime, 10) > 1000 * 60 * 60) {
-//   // If last session was over 1 hour ago, clear localStorage
-//   localStorage.clear();
-// }
-
-// // On app close
-// window.addEventListener("unload", () => {
-//   localStorage.setItem("appClosedTime", Date.now().toString());
-// });
 
 // Initialize
 await loadFiles().catch((error) => showError(error.message));
