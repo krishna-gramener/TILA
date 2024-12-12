@@ -894,6 +894,10 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
+
+    console.log("Pdf Data", state.undertakingPdfs);
+    console.log("Loan Data", state.loanPdfs);
+    console.log("Excel Data", state.undertakingExcel);
   } catch (error) {
     showError(error.message);
   } finally {
