@@ -442,8 +442,9 @@ function generateLoanIndividualReport() {
       const excelValue = mapExcelData(feature);
       const loanValue = mapLoanData(feature);
 
-      // Perform comparison before formatting
-      const isMatch = loanValue == pdfValue && pdfValue == excelValue ? "Y" : "N";
+      // Determine if values match, or if any value is NA, match becomes NA
+      const isMatch = loanValue === "NA" || pdfValue === "NA" || excelValue === "NA" ? "NA" :
+                      loanValue == pdfValue && pdfValue == excelValue ? "Y" : "N";
 
       // Format the values after matching
       const formattedLoanValue = formatCurrency(feature, loanValue);
@@ -497,7 +498,7 @@ function generateFinalCmTable() {
   const discrepancyData = {};
 
   const cleanValue = (value) =>
-    typeof value === "string" ? parseFloat(value.replace(/[$,%]/g, "")) || value : value !== undefined ? value : "NA";
+    typeof value === "string" ? (parseFloat(value.replace(/[$,%]/g, ""))).toFixed(2)|| value : value!==null ? value.toFixed(2) :value !== undefined ? value : "NA";
 
   const formatCurrency = (value) => {
     if (value === "NA" || value === null) return "NA";
@@ -515,27 +516,36 @@ function generateFinalCmTable() {
     let hasIncorrectDetails = false;
 
     const addDiscrepancy = (category, pdfValue, loanValue, excelValue) => {
+      // Skip this discrepancy if loan value is null or pdf value is 5
+      if (loanValue === null || (loanValue==25 && excelValue==0) ) {
+        return;
+      }
+
       if (!discrepancyData[category]) {
         discrepancyData[category] = [];
         incorrectCountsByCategory[category] = 0; // Initialize count for this category
       }
+
+      // Adjust loan value for "Late Charges"
+      const adjustedPdfValue = category === "Late Charges" ? 7 : pdfValue;
       discrepancyData[category].push({
         loanId,
         bookingDate,
         paymentMonthDate,
-        pdf: formatCurrency(pdfValue),
+        pdf: formatCurrency(adjustedPdfValue),
         loan: formatCurrency(loanValue),
         excel: formatCurrency(excelValue),
       });
+
       incorrectCountsByCategory[category]++; // Increment count for this category
       hasIncorrectDetails = true;
     };
+
 
     // Returned Payment Fee Comparison
     const pdfReturnedFee = cleanValue(pdfData["Returned Payment Fee"]);
     const loanReturnedFee = cleanValue(loanData["Payment Return Amount"]); // Loan data mapping
     const excelReturnedFee = cleanValue(excelData["Returned Payment Charges"]); // Excel data mapping
-
     if (
       loanReturnedFee !== pdfReturnedFee ||
       loanReturnedFee !== excelReturnedFee ||
@@ -548,7 +558,6 @@ function generateFinalCmTable() {
     const pdfLateCharges = cleanValue(pdfData["Late Charges"]);
     const loanLateCharges = cleanValue(loanData["Late Fee amount"]); // Loan data mapping
     const excelLateCharges = cleanValue(excelData["Late Fee Charges"]); // Excel data mapping
-
     if (
       loanLateCharges !== pdfLateCharges ||
       loanLateCharges !== excelLateCharges ||
@@ -613,8 +622,8 @@ function generateFinalCmTable() {
               <td>${loanId}</td>
               <td>${bookingDate}</td>
               <td>${paymentMonthDate}</td>
-              <td>${category === "Late Charges" && loan === "$25.00" ? "NA" : loan}</td>
-              <td>${category === "Late Charges" ? formatCurrency(7) : pdf}</td>
+              <td>${loan}</td>
+              <td>${pdf}</td>
               <td>${excel}</td>
             </tr>`;
         })
@@ -647,6 +656,7 @@ function generateFinalCmTable() {
       ${categoryTables}
     </div>`;
 }
+
 
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {

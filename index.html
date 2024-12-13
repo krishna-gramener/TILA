@@ -20,7 +20,9 @@
     }
 
     #undertakingPdfViewer,
-    #undertakingPdfContent,#customerPdfViewer,#customerPdfContent {
+    #undertakingPdfContent,
+    #customerPdfViewer,
+    #customerPdfContent {
       width: 100%;
       height: 400px;
       border: 1px solid #dee2e6;
@@ -32,13 +34,15 @@
 
   <h1 class="display-1 my-4 text-center">TILA Reconciliation</h1>
   <div class="narrative mx-auto my-4 ">
-    <p>Our solution addresses discrepancies between the production system and TILA (Truth in Lending Act) disclosures.</p>
-     <p>The process involves two stages:</p>
-      <strong>Stage 1: Underwriting Review</strong>
-      Compares key loan related charges communicated to customers in TILA with actual charges as per production system data.
-      Highlights differences to ensure accurate and transparent charges levied on customer.<br />
-      <strong>Stage 2: Customer Management Analysis</strong>
-      <p>Compares loan charges levied on customers with the information mentioned in TILA
+    <p>Our solution addresses discrepancies between the production system and TILA (Truth in Lending Act) disclosures.
+    </p>
+    <p>The process involves two stages:</p>
+    <strong>Stage 1: Underwriting Review</strong>
+    Compares key loan related charges communicated to customers in TILA with actual charges as per production system
+    data.
+    Highlights differences to ensure accurate and transparent charges levied on customer.<br />
+    <strong>Stage 2: Customer Management Analysis</strong>
+    <p>Compares loan charges levied on customers with the information mentioned in TILA
       Identifies discrepancies to ensure customers are not charged more than what they were informed as per TILA</p>
   </div>
 
@@ -150,9 +154,9 @@
         <div class="col-md-4">
           <div class="card">
             <div class="card-body">
-              <h5>TILA</h5>
-              <select class="form-select mt-2" id="customerPdfSelect">
-                <option value="">Select Tila</option>
+              <h5>Customer Communication PDF</h5>
+              <select class="form-select mt-2" id="loanPdfSelect">
+                <option value="">Select Loan Document</option>
               </select>
             </div>
           </div>
@@ -161,9 +165,9 @@
         <div class="col-md-4">
           <div class="card">
             <div class="card-body">
-              <h5>Customer Communication PDF</h5>
-              <select class="form-select mt-2" id="loanPdfSelect">
-                <option value="">Select Loan Document</option>
+              <h5>TILA</h5>
+              <select class="form-select mt-2" id="customerPdfSelect">
+                <option value="">Select Tila</option>
               </select>
             </div>
           </div>
