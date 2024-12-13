@@ -263,7 +263,8 @@ function generateFinalUndertakingTable() {
     if (key === "all") return; // Skip summary objects if present
     const loanId = pdfData["Account Number"];
     const matchingExcelRow = excelDataArray.find((excelData) => excelData["Loan Id"] == loanId);
-
+    const path=key;
+    // console.log("Path of pdf",path);
     if (matchingExcelRow) {
       totalAccountsChecked++;
 
@@ -305,7 +306,8 @@ function generateFinalUndertakingTable() {
             LoanId: loanId,
             BookingDate: matchingExcelRow["Booking Date"] || "N/A",
             PdfValue: pdfData[pdfField] || "N/A",
-            ExcelValue: formattedExcelValue || "N/A", // Ensure formatted display
+            ExcelValue: formattedExcelValue || "N/A",
+            Path:path || "" // Ensure formatted display
           });
         }
       }
@@ -331,7 +333,7 @@ function generateFinalUndertakingTable() {
       const rows = mismatchedAccounts
         .map(
           (account) => `
-          <tr>
+          <tr class="clickable-row" data-pdf-url="${account.Path}" style="cursor: pointer;">
             <td>${account.ApplicationId}</td>
             <td>${account.LoanId}</td>
             <td>${account.BookingDate}</td>
@@ -618,7 +620,7 @@ function generateFinalCmTable() {
         .map((row) => {
           const { loanId, bookingDate, paymentMonthDate, pdf, loan, excel } = row;
           return `
-            <tr>
+          <tr>
               <td>${loanId}</td>
               <td>${bookingDate}</td>
               <td>${paymentMonthDate}</td>
@@ -633,7 +635,7 @@ function generateFinalCmTable() {
       <table class="table table-striped my-4">
       <h4>Accounts with Incorrect ${category}</h4>
           <thead>
-            <tr>
+          <tr>
               <th>Loan Id</th>
               <th>Booking Date</th>
               <th>Payment Month Date</th>
@@ -831,6 +833,95 @@ async function loadExcelFiles(filePath, stateKey) {
 }
 // --------------------------------------Event Listeners-----------------------------------------------------
 
+document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
+  const clickedRow = e.target.closest(".clickable-row");
+
+  if (!clickedRow) return;
+
+  try {
+    toggleLoading(true);
+    // Get the data-pdf-url from the clicked row
+    const pdfUrl = clickedRow.getAttribute("data-pdf-url");
+
+    if (!pdfUrl) {
+      showError("No PDF URL found for this row.");
+      return;
+    }
+
+    // Find the TILA select element
+    const tilaSelect = document.querySelector("#undertakingPdfSelect");
+
+    if (!tilaSelect) {
+      showError("TILA select element not found.");
+      return;
+    }
+
+    // Set the select value to match the data-pdf-url
+    const matchingOption = Array.from(tilaSelect.options).find(
+      (option) => option.value === pdfUrl
+    );
+
+    if (matchingOption) {
+      tilaSelect.value = pdfUrl; // Set the selected value
+      tilaSelect.dispatchEvent(new Event("change")); // Trigger the change event
+
+      const undertakingSection = document.querySelector("#undertakingSection");
+      undertakingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      showError("No matching option found in TILA select.");
+    }
+  } catch (error) {
+    showError(error.message);
+  }finally{
+    toggleLoading(false);
+  }
+});
+
+// document.querySelector("#customerOutput").addEventListener("click", (e) => {
+//   const clickedRow = e.target.closest(".clickable-row");
+
+//   if (!clickedRow) return;
+
+//   try {
+//     toggleLoading(true);
+//     // Get the data-pdf-url from the clicked row
+//     const pdfUrl = clickedRow.getAttribute("data-pdf-url");
+
+//     if (!pdfUrl) {
+//       showError("No Customer Communication found for this row.");
+//       return;
+//     }
+
+//     // Find the TILA select element
+//     const customerCommSelect = document.querySelector("#loanPdfSelect");
+
+//     if (!customerSection) {
+//       showError("TILA select element not found.");
+//       return;
+//     }
+
+//     // Set the select value to match the data-pdf-url
+//     const matchingOption = Array.from(customerCommSelect.options).find(
+//       (option) => option.value === pdfUrl
+//     );
+
+//     if (matchingOption) {
+//       customerCommSelect.value = pdfUrl; // Set the selected value
+//       customerCommSelect.dispatchEvent(new Event("change")); // Trigger the change event
+
+//       const customerSection = document.querySelector("#customerSection");
+//       customerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+//     } else {
+//       showError("No matching option found in Customer Comm. select.");
+//     }
+//   } catch (error) {
+//     showError(error.message);
+//   }finally{
+//     toggleLoading(false);
+//   }
+// });
+
+
 async function loadFiles() {
   const undertakingPdfSelect = document.getElementById("undertakingPdfSelect");
   const undertakingExcelSelect = document.getElementById("undertakingExcelSelect");
@@ -904,6 +995,9 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
+    // console.log("TILA :",state.undertakingPdfs);
+    // console.log("LOAN :",state.loanPdfs);
+    // console.log("EXCEL :",state.undertakingExcel);
   } catch (error) {
     showError(error.message);
   } finally {
