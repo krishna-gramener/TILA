@@ -508,15 +508,15 @@ function generateFinalCmTable() {
     return value;
   };
 
-  Object.values(loanArray).forEach((loanData) => {
+  Object.entries(loanArray).forEach(([key, loanData]) => {
     totalAccounts++;
     const loanId = loanData["Loan Id"];
     const pdfData = Object.values(pdfArray).find((item) => item["Account Number"] === loanId) || {};
     const excelData = excelArray.find((item) => item["Loan Id"] == loanId) || {};
     const bookingDate = excelData["Booking Date"] || "NA";
     const paymentMonthDate = excelData["Month Date"] || "NA";
+    const path=key;
     let hasIncorrectDetails = false;
-
     const addDiscrepancy = (category, pdfValue, loanValue, excelValue) => {
       // Skip this discrepancy if loan value is null or pdf value is 5
       if (loanValue === null || (loanValue==25 && excelValue==0) ) {
@@ -537,6 +537,7 @@ function generateFinalCmTable() {
         pdf: formatCurrency(adjustedPdfValue),
         loan: formatCurrency(loanValue),
         excel: formatCurrency(excelValue),
+        Path:path
       });
 
       incorrectCountsByCategory[category]++; // Increment count for this category
@@ -618,9 +619,9 @@ function generateFinalCmTable() {
     .map((category) => {
       const rows = discrepancyData[category]
         .map((row) => {
-          const { loanId, bookingDate, paymentMonthDate, pdf, loan, excel } = row;
+          const { loanId, bookingDate, paymentMonthDate, pdf, loan, excel,Path } = row;
           return `
-          <tr>
+          <tr class="clickable-row" data-pdf-url="${Path}" style="cursor: pointer;">
               <td>${loanId}</td>
               <td>${bookingDate}</td>
               <td>${paymentMonthDate}</td>
@@ -658,7 +659,6 @@ function generateFinalCmTable() {
       ${categoryTables}
     </div>`;
 }
-
 
 // ----------------------------------------Styling Event Listeners----------------------------------
 document.getElementById("undertakingCard").addEventListener("click", () => {
@@ -877,50 +877,49 @@ document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
   }
 });
 
-// document.querySelector("#customerOutput").addEventListener("click", (e) => {
-//   const clickedRow = e.target.closest(".clickable-row");
+document.querySelector("#customerOutput").addEventListener("click", (e) => {
+  const clickedRow = e.target.closest(".clickable-row");
 
-//   if (!clickedRow) return;
+  if (!clickedRow) return;
 
-//   try {
-//     toggleLoading(true);
-//     // Get the data-pdf-url from the clicked row
-//     const pdfUrl = clickedRow.getAttribute("data-pdf-url");
+  try {
+    toggleLoading(true);
+    // Get the data-pdf-url from the clicked row
+    const pdfUrl = clickedRow.getAttribute("data-pdf-url");
 
-//     if (!pdfUrl) {
-//       showError("No Customer Communication found for this row.");
-//       return;
-//     }
+    if (!pdfUrl) {
+      showError("No Customer Communication found for this row.");
+      return;
+    }
 
-//     // Find the TILA select element
-//     const customerCommSelect = document.querySelector("#loanPdfSelect");
+    // Find the TILA select element
+    const customerCommSelect = document.querySelector("#loanPdfSelect");
 
-//     if (!customerSection) {
-//       showError("TILA select element not found.");
-//       return;
-//     }
+    if (!customerSection) {
+      showError("TILA select element not found.");
+      return;
+    }
 
-//     // Set the select value to match the data-pdf-url
-//     const matchingOption = Array.from(customerCommSelect.options).find(
-//       (option) => option.value === pdfUrl
-//     );
+    // Set the select value to match the data-pdf-url
+    const matchingOption = Array.from(customerCommSelect.options).find(
+      (option) => option.value === pdfUrl
+    );
 
-//     if (matchingOption) {
-//       customerCommSelect.value = pdfUrl; // Set the selected value
-//       customerCommSelect.dispatchEvent(new Event("change")); // Trigger the change event
+    if (matchingOption) {
+      customerCommSelect.value = pdfUrl; // Set the selected value
+      customerCommSelect.dispatchEvent(new Event("change")); // Trigger the change event
 
-//       const customerSection = document.querySelector("#customerSection");
-//       customerSection.scrollIntoView({ behavior: "smooth", block: "start" });
-//     } else {
-//       showError("No matching option found in Customer Comm. select.");
-//     }
-//   } catch (error) {
-//     showError(error.message);
-//   }finally{
-//     toggleLoading(false);
-//   }
-// });
-
+      const customerSection = document.querySelector("#customerSection");
+      customerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      showError("No matching option found in Customer Comm. select.");
+    }
+  } catch (error) {
+    showError(error.message);
+  }finally{
+    toggleLoading(false);
+  }
+});
 
 async function loadFiles() {
   const undertakingPdfSelect = document.getElementById("undertakingPdfSelect");
@@ -995,9 +994,6 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
-    // console.log("TILA :",state.undertakingPdfs);
-    // console.log("LOAN :",state.loanPdfs);
-    // console.log("EXCEL :",state.undertakingExcel);
   } catch (error) {
     showError(error.message);
   } finally {
