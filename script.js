@@ -6,7 +6,8 @@ const pdfViewer = document.getElementById("undertakingPdfViewer");
 const state = {
   undertakingPdfs: {},
   loanPdfs: {},
-  undertakingExcel: {}, // Initialized as an empty object
+  undertakingExcel: {},
+
 };
 
 const filesUploaded = {
@@ -111,7 +112,7 @@ function generateExcelTable() {
 
   // Define the fields to compare and their mappings
   const fieldMappings = {
-    Borrower: "Borrower",
+    "Borrower": "Borrower",
     "Annual Percentage Rate (APR)": "APR",
     "Finance Charge": "Finance Charge",
     "Amount Financed": "Amount Financed",
@@ -339,6 +340,11 @@ function generateFinalUndertakingTable() {
             <td>${account.BookingDate}</td>
             <td>${account.PdfValue}</td>
             <td>${account.ExcelValue}</td>
+            <td>
+            <button class="email-btn" data-loan-id="${account.LoanId}" >
+              <i class="bi bi-envelope"></i>
+            </button>
+            </td>
           </tr>`
         )
         .join("");
@@ -353,6 +359,7 @@ function generateFinalUndertakingTable() {
               <th>Booking Date</th>
               <th>${field} (TILA)</th>
               <th>${field} (Production)</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -831,9 +838,51 @@ async function loadExcelFiles(filePath, stateKey) {
     return null;
   }
 }
+
+//---------------------------------------Sending Email-------------------------------------------------------
+
+// Function to send email without using a predefined EmailJS template
+function sendEmail(loanId) {
+
+
+  const recipientEmail="satyajeet.jaiswal@straive.com";
+  emailjs
+    .send("service_snjh4dk", "template_9g2ly2q", {
+      to_email: recipientEmail,
+      to_name:"Edward",
+      from_name:"Gramener",
+      loan_id: loanId,
+      from_email:"abc@gramener.com",
+      subject: "Incorrect Loan Details Notification",
+      message: `Dear Customer,\n\nWe have identified an issue with your loan details for Loan ID: ${loanId}. Please contact us for further assistance.\n\nBest regards,\nGramener`,
+    })
+    .then(
+      (response) => {
+        alert("Email sent successfully!");
+        console.log("SUCCESS!", response.status, response.text);
+      },
+      (error) => {
+        alert("Failed to send email. Please try again.");
+        console.error("FAILED...", error);
+      }
+    );
+
+}
+
+
 // --------------------------------------Event Listeners-----------------------------------------------------
 
 document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
+
+  if (e.target.closest(".email-btn")) {
+    e.stopPropagation();
+    console.log("Clicked on email button");
+    const button=e.target.closest(".email-btn");
+    const loanId = button.getAttribute("data-loan-id");
+    sendEmail(loanId);
+    return;
+  }
+
   const clickedRow = e.target.closest(".clickable-row");
 
   if (!clickedRow) return;
@@ -994,6 +1043,11 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
+
+    console.log("PDF Files:",state.undertakingPdfs);
+    console.log("LOAN Files:",state.loanPdfs);
+    console.log("EXCEL Files:",state.undertakingExcel);
+
   } catch (error) {
     showError(error.message);
   } finally {
