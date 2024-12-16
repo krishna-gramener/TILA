@@ -1044,9 +1044,9 @@ async function loadFiles() {
       }
     }
 
-    console.log("PDF Files:",state.undertakingPdfs);
-    console.log("LOAN Files:",state.loanPdfs);
-    console.log("EXCEL Files:",state.undertakingExcel);
+    // console.log("PDF Files:",state.undertakingPdfs);
+    // console.log("LOAN Files:",state.loanPdfs);
+    // console.log("EXCEL Files:",state.undertakingExcel);
 
   } catch (error) {
     showError(error.message);
