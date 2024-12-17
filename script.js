@@ -7,7 +7,6 @@ const state = {
   undertakingPdfs: {},
   loanPdfs: {},
   undertakingExcel: {},
-
 };
 
 const filesUploaded = {
@@ -112,7 +111,7 @@ function generateExcelTable() {
 
   // Define the fields to compare and their mappings
   const fieldMappings = {
-    "Borrower": "Borrower",
+    Borrower: "Borrower",
     "Annual Percentage Rate (APR)": "APR",
     "Finance Charge": "Finance Charge",
     "Amount Financed": "Amount Financed",
@@ -264,8 +263,7 @@ function generateFinalUndertakingTable() {
     if (key === "all") return; // Skip summary objects if present
     const loanId = pdfData["Account Number"];
     const matchingExcelRow = excelDataArray.find((excelData) => excelData["Loan Id"] == loanId);
-    const path=key;
-    // console.log("Path of pdf",path);
+    const path = key;
     if (matchingExcelRow) {
       totalAccountsChecked++;
 
@@ -308,7 +306,7 @@ function generateFinalUndertakingTable() {
             BookingDate: matchingExcelRow["Booking Date"] || "N/A",
             PdfValue: pdfData[pdfField] || "N/A",
             ExcelValue: formattedExcelValue || "N/A",
-            Path:path || "" // Ensure formatted display
+            Path: path || "", // Ensure formatted display
           });
         }
       }
@@ -341,7 +339,7 @@ function generateFinalUndertakingTable() {
             <td>${account.PdfValue}</td>
             <td>${account.ExcelValue}</td>
             <td>
-            <button class="email-btn" data-loan-id="${account.LoanId}" >
+            <button class="email-btn" data-loan-id="${account.LoanId}" data-category="${field}">
               <i class="bi bi-envelope"></i>
             </button>
             </td>
@@ -452,8 +450,12 @@ function generateLoanIndividualReport() {
       const loanValue = mapLoanData(feature);
 
       // Determine if values match, or if any value is NA, match becomes NA
-      const isMatch = loanValue === "NA" || pdfValue === "NA" || excelValue === "NA" ? "NA" :
-                      loanValue == pdfValue && pdfValue == excelValue ? "Y" : "N";
+      const isMatch =
+        loanValue === "NA" || pdfValue === "NA" || excelValue === "NA"
+          ? "NA"
+          : loanValue == pdfValue && pdfValue == excelValue
+          ? "Y"
+          : "N";
 
       // Format the values after matching
       const formattedLoanValue = formatCurrency(feature, loanValue);
@@ -507,7 +509,13 @@ function generateFinalCmTable() {
   const discrepancyData = {};
 
   const cleanValue = (value) =>
-    typeof value === "string" ? (parseFloat(value.replace(/[$,%]/g, ""))).toFixed(2)|| value : value!==null ? value.toFixed(2) :value !== undefined ? value : "NA";
+    typeof value === "string"
+      ? parseFloat(value.replace(/[$,%]/g, "")).toFixed(2) || value
+      : value !== null
+      ? value.toFixed(2)
+      : value !== undefined
+      ? value
+      : "NA";
 
   const formatCurrency = (value) => {
     if (value === "NA" || value === null) return "NA";
@@ -522,11 +530,11 @@ function generateFinalCmTable() {
     const excelData = excelArray.find((item) => item["Loan Id"] == loanId) || {};
     const bookingDate = excelData["Booking Date"] || "NA";
     const paymentMonthDate = excelData["Month Date"] || "NA";
-    const path=key;
+    const path = key;
     let hasIncorrectDetails = false;
     const addDiscrepancy = (category, pdfValue, loanValue, excelValue) => {
       // Skip this discrepancy if loan value is null or pdf value is 5
-      if (loanValue === null || (loanValue==25 && excelValue==0) ) {
+      if (loanValue === null || (loanValue == 25 && excelValue == 0)) {
         return;
       }
 
@@ -544,13 +552,12 @@ function generateFinalCmTable() {
         pdf: formatCurrency(adjustedPdfValue),
         loan: formatCurrency(loanValue),
         excel: formatCurrency(excelValue),
-        Path:path
+        Path: path,
       });
 
       incorrectCountsByCategory[category]++; // Increment count for this category
       hasIncorrectDetails = true;
     };
-
 
     // Returned Payment Fee Comparison
     const pdfReturnedFee = cleanValue(pdfData["Returned Payment Fee"]);
@@ -626,7 +633,7 @@ function generateFinalCmTable() {
     .map((category) => {
       const rows = discrepancyData[category]
         .map((row) => {
-          const { loanId, bookingDate, paymentMonthDate, pdf, loan, excel,Path } = row;
+          const { loanId, bookingDate, paymentMonthDate, pdf, loan, excel, Path } = row;
           return `
           <tr class="clickable-row" data-pdf-url="${Path}" style="cursor: pointer;">
               <td>${loanId}</td>
@@ -635,6 +642,11 @@ function generateFinalCmTable() {
               <td>${loan}</td>
               <td>${pdf}</td>
               <td>${excel}</td>
+              <td>
+              <button class="email-btn" data-loan-id="${loanId}" data-category="${category}">
+              <i class="bi bi-envelope"></i>
+              </td>
+            </button>
             </tr>`;
         })
         .join("");
@@ -650,6 +662,7 @@ function generateFinalCmTable() {
               <th>${category} (Customer Comm.)</th>
               <th>${category} (TILA)</th>
               <th>${category} (Production Data)</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -842,44 +855,63 @@ async function loadExcelFiles(filePath, stateKey) {
 //---------------------------------------Sending Email-------------------------------------------------------
 
 // Function to send email without using a predefined EmailJS template
-function sendEmail(loanId) {
-
-
-  const recipientEmail="satyajeet.jaiswal@straive.com";
+function sendEmail(loanId, category) {
+  const recipientEmail = "satyajeet.jaiswal@straive.com";
+  const userDetailsPdf = Object.values(state.undertakingPdfs).filter((pdfData) => {
+    return loanId === pdfData["Account Number"];
+  });
+  const userDetailsExcel = state.undertakingExcel.find((excelData) => excelData["Loan Id"] == loanId);
+  const today = new Date();
+  const day = String(today.getDate()).padStart(2, "0"); // Ensure 2 digits
+  const month = String(today.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
+  const year = today.getFullYear();
+  const customDate = `${day}/${month}/${year}`;
   emailjs
     .send("service_snjh4dk", "template_9g2ly2q", {
       to_email: recipientEmail,
-      to_name:"Edward",
-      from_name:"Gramener",
-      loan_id: loanId,
-      from_email:"abc@gramener.com",
-      subject: "Incorrect Loan Details Notification",
-      message: `Dear Customer,\n\nWe have identified an issue with your loan details for Loan ID: ${loanId}. Please contact us for further assistance.\n\nBest regards,\nGramener`,
+      subject: "Notification of Error Identified in TILA Reconciliation Process",
+      message: `Dear ${userDetailsExcel["Borrower"]},\n
+Re: Account Number: ${userDetailsExcel["Loan Id"]} \n
+
+We have identified an error in the TILA reconciliation process for your account. Our review has revealed discrepancies in the calculation of interest rates and/or fees associated with your loan. This error may have resulted in an incorrect balance or payment amount.
+Details of the Error:\n
+The error was identified on ${customDate}.\n
+Error in ${category} \n
+We are taking immediate action to correct the error and ensure that your account is accurately reflected. The corrected balance will be updated as follows:
+To ensure that your account is accurately reflected, we recommend that you:\n
+Review your account statement to verify the corrected balance and payment amount.\n
+Contact our customer service department if you have any questions or concerns.\n
+Make any necessary payments to avoid late fees or penalties.\n
+Contact Information:
+If you have any questions or concerns, please do not hesitate to contact us at:
+Phone: 123-456-7890
+Email: abc@example.com
+Mailing Address: 123 Main Street, City, State, ZIP Code\n
+We apologize for any inconvenience this error may have caused and appreciate your patience and understanding as we work to resolve this issue.
+Sincerely,\n
+Lorem Ipsum\n ${userDetailsPdf[0]["Creditor"]}\n123-456-7890 \n
+`,
     })
     .then(
       (response) => {
         alert("Email sent successfully!");
-        console.log("SUCCESS!", response.status, response.text);
       },
       (error) => {
         alert("Failed to send email. Please try again.");
         console.error("FAILED...", error);
       }
     );
-
 }
-
 
 // --------------------------------------Event Listeners-----------------------------------------------------
 
 document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
-
   if (e.target.closest(".email-btn")) {
     e.stopPropagation();
-    console.log("Clicked on email button");
-    const button=e.target.closest(".email-btn");
+    const button = e.target.closest(".email-btn");
     const loanId = button.getAttribute("data-loan-id");
-    sendEmail(loanId);
+    const category = button.getAttribute("data-category");
+    sendEmail(loanId, category);
     return;
   }
 
@@ -906,9 +938,7 @@ document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
     }
 
     // Set the select value to match the data-pdf-url
-    const matchingOption = Array.from(tilaSelect.options).find(
-      (option) => option.value === pdfUrl
-    );
+    const matchingOption = Array.from(tilaSelect.options).find((option) => option.value === pdfUrl);
 
     if (matchingOption) {
       tilaSelect.value = pdfUrl; // Set the selected value
@@ -921,12 +951,24 @@ document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
     }
   } catch (error) {
     showError(error.message);
-  }finally{
+  } finally {
     toggleLoading(false);
   }
 });
 
+
+
 document.querySelector("#customerOutput").addEventListener("click", (e) => {
+
+  if (e.target.closest(".email-btn")) {
+    e.stopPropagation();
+    const button = e.target.closest(".email-btn");
+    const loanId = button.getAttribute("data-loan-id");
+    const category = button.getAttribute("data-category");
+    sendEmail(loanId, category);
+    return;
+  }
+
   const clickedRow = e.target.closest(".clickable-row");
 
   if (!clickedRow) return;
@@ -950,9 +992,7 @@ document.querySelector("#customerOutput").addEventListener("click", (e) => {
     }
 
     // Set the select value to match the data-pdf-url
-    const matchingOption = Array.from(customerCommSelect.options).find(
-      (option) => option.value === pdfUrl
-    );
+    const matchingOption = Array.from(customerCommSelect.options).find((option) => option.value === pdfUrl);
 
     if (matchingOption) {
       customerCommSelect.value = pdfUrl; // Set the selected value
@@ -965,7 +1005,7 @@ document.querySelector("#customerOutput").addEventListener("click", (e) => {
     }
   } catch (error) {
     showError(error.message);
-  }finally{
+  } finally {
     toggleLoading(false);
   }
 });
@@ -1043,10 +1083,6 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
-
-    // console.log("PDF Files:",state.undertakingPdfs);
-    // console.log("LOAN Files:",state.loanPdfs);
-    // console.log("EXCEL Files:",state.undertakingExcel);
 
   } catch (error) {
     showError(error.message);
