@@ -56,180 +56,6 @@ function highlightNumbers(text) {
 }
 
 // ----------------------------------------------Generate Tables----------------------------------------------
-function generateSingleTable(data) {
-  const allowedKeys = [
-    "Creditor",
-    "Borrower",
-    "Annual Percentage Rate (APR)",
-    "Finance Charge",
-    "Amount Financed",
-    "Total of Payments",
-    "Monthly Payment Amount",
-    "Number of Payments",
-    "Returned Payment Fee",
-    "Origination Fee",
-    "Late Charges",
-  ];
-
-  let table = `
-    <table class="table table-stripped">
-      <thead>
-        <tr>
-          <th>Feature</th>
-          <th>Tila</th>
-        </tr>
-      </thead>
-      <tbody>`;
-
-  for (const [key, value] of Object.entries(data)) {
-    // Only include the allowed keys
-    if (!allowedKeys.includes(key)) continue;
-
-    table += `
-      <tr>
-        <td>${key}</td>
-        <td>${value}</td>
-      </tr>`;
-  }
-
-  table += `
-      </tbody>
-    </table>`;
-
-  return table;
-}
-
-function generateExcelTable() {
-  const selectedPdf = document.getElementById("undertakingPdfSelect").value;
-  const pdfData = state.undertakingPdfs[selectedPdf]; // JSON object for PDF data
-  const excelData = state.undertakingExcel; // JSON array containing Excel data for all sheets
-
-  if (!pdfData || !excelData) {
-    showError("PDF or Excel data is missing.");
-    return;
-  }
-
-  // Define the fields to compare and their mappings
-  const fieldMappings = {
-    Borrower: "Borrower",
-    "Annual Percentage Rate (APR)": "APR",
-    "Finance Charge": "Finance Charge",
-    "Amount Financed": "Amount Financed",
-    "Total of Payments": "Total of Payments",
-    "Monthly Payment Amount": "EMI Amount",
-    "Number of Payments": "Number of Payments",
-    "Returned Payment Fee": "Returned Payment Charges",
-    "Origination Fee": "Origination Fee",
-    "Late Charges": "Late Fee Charges",
-  };
-
-  // Attempt to find the corresponding Excel row by Loan ID
-  const loanId = pdfData["Account Number"];
-  const matchingRow = excelData.find((ele) => ele["Loan Id"] == loanId);
-
-  if (!matchingRow) {
-    showError("No matching row found in Excel data for the provided Loan ID.");
-    return `<p>No matching data found for Loan ID: ${loanId}</p>`;
-  }
-
-  // Start creating the HTML table
-  let table = `
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>Field</th>
-          <th>TILA Data</th>
-          <th>Excel Data</th>
-          <th>Match</th>
-        </tr>
-      </thead>
-      <tbody>`;
-
-  // Iterate over the field mappings and compare the values
-  for (const [pdfField, excelField] of Object.entries(fieldMappings)) {
-    // Handle specific fields with custom logic
-    if (pdfField === "Returned Payment Fee" || pdfField === "Late Charges") {
-      table += `
-        <tr>
-          <td>${pdfField}</td>
-          <td>${pdfData[pdfField] || "N/A"}</td>
-          <td>NA</td>
-          <td>NA</td>
-        </tr>`;
-      continue;
-    }
-
-    // PDF value handling (remove $ or %, and parse as number)
-    let pdfValueRaw = pdfData[pdfField] !== undefined ? pdfData[pdfField] : "N/A";
-    let pdfValue =
-      typeof pdfValueRaw === "string"
-        ? parseFloat(pdfValueRaw.replace(/[$,%]/g, "")) // Remove $ and % for comparison
-        : pdfValueRaw;
-
-    // Excel value handling
-    let excelValue = matchingRow && matchingRow[excelField] !== undefined ? matchingRow[excelField] : "N/A";
-
-    // Special handling for "Annual Percentage Rate (APR)"
-    if (pdfField === "Annual Percentage Rate (APR)" && typeof excelValue === "number") {
-      excelValue *= 100; // Convert to percentage for comparison
-      excelValue = parseFloat(excelValue.toFixed(2)); // Truncate to 2 decimal places
-    }
-
-    // Ensure Excel value is always rounded to 2 decimals for numeric fields
-    if (typeof excelValue === "number") {
-      excelValue = parseFloat(excelValue.toFixed(2));
-    }
-
-    // Format values for display
-    const formattedPdfValue =
-      pdfField === "Annual Percentage Rate (APR)"
-        ? `${pdfValueRaw}`
-        : [
-            "Finance Charge",
-            "Amount Financed",
-            "Total of Payments",
-            "Monthly Payment Amount",
-            "Origination Fee",
-          ].includes(pdfField)
-        ? `${pdfValueRaw}`
-        : pdfValueRaw;
-
-    const formattedExcelValue =
-      pdfField === "Annual Percentage Rate (APR)"
-        ? `${excelValue}%`
-        : [
-            "Finance Charge",
-            "Amount Financed",
-            "Total of Payments",
-            "Monthly Payment Amount",
-            "Origination Fee",
-          ].includes(pdfField)
-        ? `$${excelValue}`
-        : excelValue;
-
-    // Compare the values for mismatch
-    const match = pdfValue == excelValue;
-
-    // Add a row to the table
-    table += `
-      <tr>
-        <td>${pdfField}</td>
-        <td>${formattedPdfValue}</td>
-        <td>${formattedExcelValue}</td>
-        <td>${match ? "Y" : "N"}</td>
-      </tr>`;
-  }
-
-  // Close the table
-  table += `
-      </tbody>
-    </table>
-    <p><strong>Note</strong> : If payment is returned, returned payment charge of $20 is applicable</p>`;
-
-  // Return the table
-  return table;
-}
-
 function generateFinalUndertakingTable() {
   const pdfDataArray = state.undertakingPdfs; // Array of PDF data objects
   const excelDataArray = state.undertakingExcel; // Array of Excel data objects
@@ -388,109 +214,6 @@ function generateFinalUndertakingTable() {
     summaryTable: summaryTable,
     mismatchTables: mismatchTables,
   };
-}
-
-function generateLoanIndividualReport() {
-  const pdfArray = state.undertakingPdfs;
-  const excelArray = state.undertakingExcel;
-  const selectedLoanId = document.querySelector("#loanPdfSelect").value;
-  const loanData = state.loanPdfs[selectedLoanId];
-
-  if (!loanData) {
-    showError("No matching loan data found.");
-    return `<p>No data found for Loan ID: ${selectedLoanId}</p>`;
-  }
-
-  const pdfData = Object.values(pdfArray).find((item) => item["Account Number"] === loanData["Loan Id"]) || {};
-  const excelData = excelArray.find((item) => item["Loan Id"] == loanData["Loan Id"]) || {};
-
-  const features = ["Borrower", "Account Number", "Returned Payment Fee", "Late Charges"];
-
-  const cleanValue = (value) =>
-    typeof value === "string" ? parseFloat(value.replace(/[$,%]/g, "")) || value : value !== undefined ? value : "NA";
-
-  const formatCurrency = (feature, value) =>
-    ["Returned Payment Fee", "Late Charges"].includes(feature) && value !== "NA" && !isNaN(value) ? `$${value}` : value;
-
-  const mapExcelData = (feature) => {
-    if (feature === "Returned Payment Fee") {
-      return cleanValue(excelData["Returned Payment Charges"])?.toFixed(2) || "NA";
-    }
-    if (feature === "Account Number") return cleanValue(excelData["Loan Id"]) || "NA";
-    if (feature === "Late Charges") {
-      return cleanValue(excelData["Late Fee Charges"])?.toFixed(2) || "NA";
-    }
-    return excelData[feature] != null ? cleanValue(excelData[feature]) : "NA";
-  };
-
-  const mapLoanData = (feature) => {
-    if (feature === "Borrower") return loanData[feature] || "NA";
-    if (feature === "Account Number") return loanData["Loan Id"] || "NA";
-
-    if (feature === "Returned Payment Fee") {
-      const returnedPaymentFee = loanData["Payment Return Amount"];
-      return returnedPaymentFee !== null ? cleanValue(returnedPaymentFee) : "NA";
-    }
-
-    if (feature === "Late Charges") {
-      const returnedPaymentFee = loanData["Payment Return Amount"];
-      const lateCharges = returnedPaymentFee === null ? loanData["Late Fee amount"] : "NA";
-      return cleanValue(lateCharges) || "NA";
-    }
-
-    return cleanValue(loanData[feature]) || "NA";
-  };
-
-  const tableRows = features
-    .map((feature) => {
-      let pdfValue = cleanValue(pdfData[feature]);
-      if (feature === "Late Charges") pdfValue = 7; // Set Late Charges to 7 for TILA Data
-
-      const excelValue = mapExcelData(feature);
-      const loanValue = mapLoanData(feature);
-
-      // Determine if values match, or if any value is NA, match becomes NA
-      const isMatch =
-        loanValue === "NA" || pdfValue === "NA" || excelValue === "NA"
-          ? "NA"
-          : loanValue == pdfValue && pdfValue == excelValue
-          ? "Y"
-          : "N";
-
-      // Format the values after matching
-      const formattedLoanValue = formatCurrency(feature, loanValue);
-      const formattedPdfValue = formatCurrency(feature, pdfValue);
-      const formattedExcelValue = formatCurrency(feature, excelValue);
-
-      return `
-        <tr>
-          <td>${feature}</td>
-          <td>${formattedLoanValue}</td>
-          <td>${formattedPdfValue !== undefined ? formattedPdfValue : "NA"}</td>
-          <td>${formattedExcelValue}</td>
-          <td>${isMatch}</td>
-        </tr>`;
-    })
-    .join("");
-
-  return `
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>Features</th>
-          <th>Customer Comm. Data</th>
-          <th>Tila Data</th>
-          <th>Production Data</th>
-          <th>Match</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${tableRows}
-      </tbody>
-    </table>
-    <p><strong>Note :</strong></p>
-    <p>1) If payment is returned, returned payment charge of $20 is applicable</p>
-    <p>2) 5% of the unpaid installment; up to max of $7</p>`;
 }
 
 function generateFinalCmTable() {
@@ -699,7 +422,6 @@ document.getElementById("customerManagementCard").addEventListener("click", () =
 document.getElementById("undertakingPdfSelect").addEventListener("change", (e) => {
   const selectedFile = e.target.value;
   const pdfContent = state.undertakingPdfs[selectedFile]?.["Complete Extracted Text"] || "";
-  const individualReportCard = document.getElementById("undertakingIndividualReportCard");
   const loadingSpinner = document.getElementById("loadingSpinner");
   const pdfExtractCard = document.getElementById("undertakingPdfContentCard");
 
@@ -707,23 +429,17 @@ document.getElementById("undertakingPdfSelect").addEventListener("change", (e) =
     loadingSpinner.classList.toggle("d-none", !isVisible);
     pdfViewerCard.classList.toggle("d-none", isVisible);
     pdfExtractCard.classList.toggle("d-none", isVisible);
-    individualReportCard.classList.toggle("d-none", isVisible);
   };
 
   try {
     toggleVisibility(true);
 
-    if (!selectedFile || !pdfContent) throw new Error("PDF not found");
+    if(!selectedFile)return;
+    if (!pdfContent) throw new Error("PDF not found");
 
     // Display PDF content
     pdfViewer.src = selectedFile;
     document.getElementById("undertakingPdfContent").innerHTML = highlightNumbers(pdfContent);
-
-    // Generate and display the table
-    const table = filesUploaded.isUndertakingExcel
-      ? generateExcelTable()
-      : generateSingleTable(state.undertakingPdfs[selectedFile]);
-    document.getElementById("undertakingIndividualReport").innerHTML = table;
 
     toggleVisibility(false);
   } catch (error) {
@@ -741,28 +457,25 @@ document.getElementById("loanPdfSelect").addEventListener("change", (e) => {
     loadingSpinner: document.getElementById("loadingSpinner"),
     pdfExtractCard: document.getElementById("customerPdfContentCard"),
     pdfViewerCard: document.getElementById("customerPdfViewerCard"),
-    individualReportCard: document.getElementById("customerIndividualReportCard"),
     pdfViewer: document.getElementById("customerPdfViewer"),
     pdfContentContainer: document.getElementById("customerPdfContent"),
-    reportContainer: document.getElementById("customerIndividualReportCard"),
   };
 
   const toggleVisibility = (isLoading) => {
     elements.loadingSpinner.classList.toggle("d-none", !isLoading);
     elements.pdfViewerCard.classList.toggle("d-none", isLoading);
     elements.pdfExtractCard.classList.toggle("d-none", isLoading);
-    elements.individualReportCard.classList.toggle("d-none", isLoading);
   };
 
   try {
     toggleVisibility(true);
 
-    if (!selectedFile || !pdfContent) throw new Error("PDF not found");
+    if(!selectedFile)return;
+    if (!pdfContent) throw new Error("PDF not found");
 
     // Update viewer and content
     elements.pdfViewer.src = selectedFile;
     elements.pdfContentContainer.innerHTML = highlightNumbers(pdfContent);
-    elements.reportContainer.innerHTML = generateLoanIndividualReport();
 
     toggleVisibility(false);
   } catch (error) {
@@ -775,18 +488,13 @@ document.getElementById("undertakingExcelSelect").addEventListener("change", asy
   filesUploaded.isUndertakingExcel = document.getElementById("undertakingExcelSelect").value !== "";
   const selectedFile = document.getElementById("undertakingPdfSelect").value;
   const pdfContent = state.undertakingPdfs[selectedFile]["Complete Extracted Text"] || "";
-  const individualReportCard = document.getElementById("undertakingIndividualReportCard");
 
   try {
     loadingSpinner.classList.remove("d-none");
-    individualReportCard.classList.add("d-none");
 
     if (!selectedFile || !pdfContent) {
       throw new Error("PDF not found");
     }
-    document.getElementById("undertakingIndividualReportCard").classList.remove("d-none");
-    const table = generateExcelTable();
-    document.getElementById("undertakingIndividualReport").innerHTML = table;
   } catch (error) {
     showError("Error handling PDF: " + error.message);
   } finally {
@@ -812,7 +520,7 @@ document.getElementById("undertakingProcess").addEventListener("click", (e) => {
   }
 });
 
-document.getElementById("customerProcess").addEventListener("click", () => {
+document.getElementById("customerProcess").addEventListener("click", (e) => {
   document.getElementById("customerOutput").innerHTML = `<div class="spinner-border text-primary" role="status"></div>`;
   try {
     const table = generateFinalCmTable();
@@ -872,7 +580,6 @@ function sendEmail(loanId, category) {
       subject: "Notification of Error Identified in TILA Reconciliation Process",
       message: `Dear ${userDetailsExcel["Borrower"]},\n
 Re: Account Number: ${userDetailsExcel["Loan Id"]} \n
-
 We have identified an error in the TILA reconciliation process for your account. Our review has revealed discrepancies in the calculation of interest rates and/or fees associated with your loan. This error may have resulted in an incorrect balance or payment amount.
 Details of the Error:\n
 The error was identified on ${customDate}.\n
@@ -898,7 +605,7 @@ Lorem Ipsum\n ${userDetailsPdf[0]["Creditor"]}\n123-456-7890 \n
       },
       (error) => {
         alert("Failed to send email. Please try again.");
-        console.error("FAILED...", error);
+        showError("FAILED...", error);
       }
     );
 }
@@ -943,9 +650,8 @@ document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
     if (matchingOption) {
       tilaSelect.value = pdfUrl; // Set the selected value
       tilaSelect.dispatchEvent(new Event("change")); // Trigger the change event
-
-      const undertakingSection = document.querySelector("#undertakingSection");
-      undertakingSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      const undertakingPdfViewer = document.querySelector("#undertakingPdfViewerCard");
+      undertakingPdfViewer.scrollIntoView({ behavior: "smooth", block: "start" });
     } else {
       showError("No matching option found in TILA select.");
     }
@@ -955,8 +661,6 @@ document.querySelector("#undertakingOutput").addEventListener("click", (e) => {
     toggleLoading(false);
   }
 });
-
-
 
 document.querySelector("#customerOutput").addEventListener("click", (e) => {
 
@@ -997,9 +701,8 @@ document.querySelector("#customerOutput").addEventListener("click", (e) => {
     if (matchingOption) {
       customerCommSelect.value = pdfUrl; // Set the selected value
       customerCommSelect.dispatchEvent(new Event("change")); // Trigger the change event
-
-      const customerSection = document.querySelector("#customerSection");
-      customerSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      const customerPdfViewer = document.querySelector("#customerPdfViewerCard");
+      customerPdfViewer.scrollIntoView({ behavior: "smooth", block: "start" });
     } else {
       showError("No matching option found in Customer Comm. select.");
     }
@@ -1009,6 +712,14 @@ document.querySelector("#customerOutput").addEventListener("click", (e) => {
     toggleLoading(false);
   }
 });
+
+function createDummyOption(selectedElement){
+  const dummyOption = document.createElement("option");
+  dummyOption.value = ""; // No value assigned
+  dummyOption.textContent = "all.pdf"; // Text displayed in the dropdown
+  // dummyOption.selected = true;  Set as default selected option
+  selectedElement.appendChild(dummyOption);
+}
 
 async function loadFiles() {
   const undertakingPdfSelect = document.getElementById("undertakingPdfSelect");
@@ -1037,11 +748,14 @@ async function loadFiles() {
       const option = document.createElement("option");
       option.value = pdf.path; // Path will be used for loading
       option.textContent = pdf.name; // Name displayed in the dropdown
+      option.style.display="none";
       undertakingPdfSelect.appendChild(option);
-
       const customerPdfOption = option.cloneNode(true);
       customerTila.append(customerPdfOption);
     });
+
+    createDummyOption(undertakingPdfSelect);
+    createDummyOption(customerTila);
 
     // Preload and cache PDF texts (optional)
     for (const pdf of pdfConfig) {
@@ -1072,8 +786,11 @@ async function loadFiles() {
       const option = document.createElement("option");
       option.value = loan.path; // Path will be used for loading
       option.textContent = loan.name; // Name displayed in the dropdown
+      option.style.display="none";
       loanPdfSelect.appendChild(option);
     });
+
+    createDummyOption(loanPdfSelect);
 
     for (const loan of loanConfig) {
       if (!extractedTexts[loan.path]) {
@@ -1083,7 +800,6 @@ async function loadFiles() {
         extractedLoanTexts[loan.path] = textInJson;
       }
     }
-
   } catch (error) {
     showError(error.message);
   } finally {
