@@ -872,16 +872,12 @@ function sendEmail(loanId, category) {
       subject: "Notification of Error Identified in TILA Reconciliation Process",
       message: `Dear ${userDetailsExcel["Borrower"]},\n
 Re: Account Number: ${userDetailsExcel["Loan Id"]} \n
-
-We have identified an error in the TILA reconciliation process for your account. Our review has revealed discrepancies in the calculation of interest rates and/or fees associated with your loan. This error may have resulted in an incorrect balance or payment amount.
+Our review has revealed discrepancies in the calculation of interest rates and/or fees associated with your loan. This error may have resulted in an incorrect balance or payment amount.
 Details of the Error:\n
 The error was identified on ${customDate}.\n
 Error in ${category} \n
-We are taking immediate action to correct the error and ensure that your account is accurately reflected. The corrected balance will be updated as follows:
-To ensure that your account is accurately reflected, we recommend that you:\n
-Review your account statement to verify the corrected balance and payment amount.\n
+We are taking immediate action to correct the error and ensure that your account is accurately reflected.
 Contact our customer service department if you have any questions or concerns.\n
-Make any necessary payments to avoid late fees or penalties.\n
 Contact Information:
 If you have any questions or concerns, please do not hesitate to contact us at:
 Phone: 123-456-7890
